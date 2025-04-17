@@ -6,9 +6,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_compile_options(-Wall -Wextra)
 
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/include")
 if(CY_BUILD_TESTS)
     message("<CY> Building tests.")
 
     add_executable(types "${CMAKE_CURRENT_SOURCE_DIR}/tests/types.cpp")
-    target_include_directories(types PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+    add_executable(maybe "${CMAKE_CURRENT_SOURCE_DIR}/tests/maybe.cpp")
 endif()

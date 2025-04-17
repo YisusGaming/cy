@@ -10,7 +10,7 @@ class Maybe;
 template<typename T>
 class Some
 {
-    static_assert(std::is_void_v<T>, "Maybe<void> is invalid.");
+    static_assert(!std::is_void_v<T>, "Maybe<void> is invalid.");
 
   private:
     T val;
@@ -27,9 +27,6 @@ class Some
 
     constexpr T const &get() const & { return this->val; }
     constexpr T      &&get()      &&{ return std::move(this->val); }
-
-    constexpr operator Maybe<T>() const & { return Maybe(Some(val)); }
-    constexpr operator Maybe<T>() && { return Maybe(Some(std::move(val))); }
 };
 
 class None
@@ -41,9 +38,7 @@ class None
 template<typename T>
 class Maybe
 {
-    static_assert(std::is_void_v<T>, "Maybe<void> is invalid.");
-    static_assert(!std::is_default_constructible_v<T>,
-                  "T is required to be default constructible.");
+    static_assert(!std::is_void_v<T>, "Maybe<void> is invalid.");
 
   private:
     T    val;
@@ -59,15 +54,25 @@ class Maybe
     constexpr Maybe &operator=(const Maybe &) = default;
     constexpr Maybe &operator=(Maybe &&) = default;
 
-    constexpr Maybe(Some<T> val)
-        : val(std::move(val.get()))
+    constexpr Maybe(Some<T> val) noexcept
+        : val(std::move(val).get())
         , has_Val(true)
     {
+        if constexpr (std::is_class_v<T>) {
+            static_assert(
+                std::is_default_constructible_v<T>,
+                "Maybe<class T> requires T to be default constructible.");
+        }
     }
 
-    constexpr Maybe(None)
+    constexpr Maybe(None) noexcept
         : has_Val(false)
     {
+        if constexpr (std::is_class_v<T>) {
+            static_assert(
+                std::is_default_constructible_v<T>,
+                "Maybe<class T> requires T to be default constructible.");
+        }
     }
 
     constexpr bool     has_Value() const { return this->has_Val; }
@@ -85,6 +90,9 @@ class Maybe
     }
     constexpr T CloneSome() const &
     {
+        static_assert(std::is_copy_constructible_v<T>,
+                      "CloneSome() requires T to be copyable.");
+
         if (!has_Value())
             throw std::exception("Called CloneSome() on a None value.");
         return this->some_unchecked();
