@@ -26,7 +26,32 @@ class Some
     }
 
     constexpr T const &get() const & { return this->val; }
+    constexpr T       &get()       &{ return this->val; }
     constexpr T      &&get()      &&{ return std::move(this->val); }
+};
+
+/**
+ * @attention <!> Reference specialization.
+ *
+ */
+template<typename T>
+class Some<T &>
+{
+    static_assert(!std::is_void_v<T>, "Maybe<void> is invalid.");
+
+  private:
+    T *val;
+
+  public:
+    friend Maybe<T &>;
+
+    explicit constexpr Some(T &value)
+        : val(&value)
+    {
+    }
+
+    constexpr T const &get() const & { return *this->val; }
+    constexpr T       &get()       &{ return *this->val; }
 };
 
 class None
@@ -99,6 +124,65 @@ class Maybe
     }
 
     constexpr T &&Unwrap()
+    {
+        if (!has_Value())
+            throw std::exception("Called Unwrap() on a None value.");
+
+        return std::move(*this).some_unchecked();
+    }
+};
+
+/**
+ * @attention <!> Reference specialization.
+ *
+ */
+template<typename T>
+class Maybe<T &>
+{
+    static_assert(!std::is_void_v<T>, "Maybe<void> is invalid.");
+
+  private:
+    T   *val;
+    bool has_Val;
+
+    constexpr T const &some_unchecked() const & { return *this->val; }
+    constexpr T       &some_unchecked()       &{ return *this->val; }
+    constexpr T       &some_unchecked()       &&{ return *this->val; }
+
+  public:
+    constexpr Maybe(const Maybe &) = default;
+    constexpr Maybe(Maybe &&) = default;
+    constexpr Maybe &operator=(const Maybe &) = default;
+    constexpr Maybe &operator=(Maybe &&) = default;
+
+    constexpr Maybe(Some<T &> val) noexcept
+        : val(val.val)
+        , has_Val(true)
+    {
+    }
+
+    constexpr Maybe(None) noexcept
+        : has_Val(false)
+    {
+    }
+
+    constexpr bool     has_Value() const { return this->has_Val; }
+    constexpr T const &Some() const &
+    {
+        if (!has_Value())
+            throw std::exception("Called Some() on a None value.");
+
+        return this->some_unchecked();
+    }
+    constexpr T &Some() &
+    {
+        if (!has_Value())
+            throw std::exception("Called Some() on a None value.");
+
+        return this->some_unchecked();
+    }
+
+    constexpr T &Unwrap()
     {
         if (!has_Value())
             throw std::exception("Called Unwrap() on a None value.");

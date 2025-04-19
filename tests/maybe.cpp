@@ -2,6 +2,7 @@
 #include "CY/types.hpp"
 #include <cassert>
 #include <cstdio>
+#include <memory>
 #include <string>
 
 // #define STATIC_ASSERT_FAIL
@@ -52,6 +53,24 @@ cy::Maybe<Find> FindCharInString(std::string const &str, char fc)
     return cy::None();
 }
 
+std::string              test1 = "Epic testing over here";
+std::string              test2 = "yessir I agree";
+std::string              test3 = "How many more strings do I need?";
+std::string              test4 = "Pfft, I don't know.";
+cy::Maybe<std::string &> GetString(usize indx)
+{
+    if (indx == 0)
+        return cy::Some<std::string &>(test1);
+    else if (indx == 1)
+        return cy::Some<std::string &>(test2);
+    else if (indx == 2)
+        return cy::Some<std::string &>(test3);
+    else if (indx == 3)
+        return cy::Some<std::string &>(test4);
+
+    return cy::None();
+}
+
 int32 main()
 {
     std::string test = "I am an epic test string!";
@@ -64,6 +83,13 @@ int32 main()
     } else {
         std::printf("Nothing found!\n");
     }
+
+    auto &str = GetString(0).Unwrap();
+    assert(str == test1);
+    assert(std::addressof(str) == &test1);
+
+    auto other_str = GetString(29);
+    assert(other_str.has_Value() == false);
 
     return 0;
 }
