@@ -408,4 +408,121 @@ class Maybe<T &>
         return std::move(*this).some_unchecked();
     }
 };
+
+/**
+ * @brief `Ok<T>` owns a value of type `T`, representing success.
+ *
+ * @tparam T The type of value owned by `Ok<T>`.
+ * @sa @ref Err<E>
+ * @sa @ref Result<T, E>
+ *
+ * @since v1.0.0
+ */
+template<typename T>
+class Ok
+{
+  private:
+    T val;
+
+  public:
+    /**
+     * @brief Constructs a new `Ok<T>` by copying `value`.
+     *
+     * @sa @ref Err<E>
+     * @sa @ref Result<T, E>
+     *
+     * @since v1.0.0
+     */
+    explicit constexpr Ok(T const &value)
+        : val(value)
+    {
+    }
+    /**
+     * @brief Constructs a new `Ok<T>` by moving `value`.
+     *
+     * @sa @ref Err<E>
+     * @sa @ref Result<T, E>
+     *
+     * @since v1.0.0
+     */
+    explicit constexpr Ok(T &&value)
+        : val(std::move(value))
+    {
+    }
+
+    /**
+     * @return Gets a const reference (`T const&`) to the value owned by
+     * `Ok<T>`.
+     * @since v1.0.0
+     */
+    constexpr T const &get() const & { return this->val; }
+    /**
+     * @return Gets a reference (`T&`) to the value owned by `Ok<T>`.
+     * @since v1.0.0
+     */
+    constexpr T &get() & { return this->val; }
+    /**
+     * @return Moves the value out of `Ok<T>`.
+     * @since v1.0.0
+     */
+    constexpr T &&get() && { return std::move(this->val); }
+};
+
+/**
+ * @attention This is a template specialization for `T&`. `Ok<T&>` holds a
+ * pointer to `T` in order to initialize `Result<T&, E>`, which requires a `T*`.
+ * @brief Contains a reference to `T`.
+ *
+ * @tparam T The type of value.
+ * @sa @ref Err<E>
+ * @sa @ref Result<T&, E>
+ *
+ * @since v1.0.0
+ */
+template<typename T>
+class Ok<T &>
+{
+  private:
+    T *val;
+
+  public:
+    /* friend Maybe<T &>; */
+
+    /**
+     * @brief Initializes the reference in `Ok`.
+     * @since v1.0.0
+     */
+    explicit constexpr Ok(T &value)
+        : val(&value)
+    {
+    }
+
+    /**
+     * @return Gets a const reference (`T const&`) to the value.
+     * @since v1.0.0
+     */
+    constexpr T const &get() const & { return *this->val; }
+    /**
+     * @return Gets a reference (`T&`) to the value.
+     * @since v1.0.0
+     */
+    constexpr T &get() & { return *this->val; }
+};
+
+/**
+ * @attention This is a template specialization for when `Ok` is not required to
+ * contain a value, it only represents a successful result.
+ * @brief Initializes `Result<void, E>`.
+ *
+ * @sa @ref Err<E>
+ * @sa @ref Result<T, E>
+ *
+ * @since v1.0.0
+ */
+template<>
+class Ok<void>
+{
+    constexpr Ok() = default;
+};
+Ok() -> Ok<void>;
 }
