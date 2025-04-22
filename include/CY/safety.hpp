@@ -175,6 +175,12 @@ class Maybe
     constexpr T &&some_unchecked() && { return std::move(this->val); }
 
   public:
+    ~Maybe()
+    {
+        if (this->has_Val)
+            this->val.~T();
+    }
+
     constexpr Maybe(const Maybe &) = default;
     constexpr Maybe(Maybe &&) = default;
     constexpr Maybe &operator=(const Maybe &) = default;
@@ -328,6 +334,8 @@ class Maybe<T &>
     constexpr T &some_unchecked() && { return *this->val; }
 
   public:
+    ~Maybe() = default;
+
     constexpr Maybe(const Maybe &) = default;
     constexpr Maybe(Maybe &&) = default;
     constexpr Maybe &operator=(const Maybe &) = default;
@@ -657,6 +665,14 @@ class [[nodiscard("Result must be handled.")]] Result
     constexpr E &&err_unchecked() && { return std::move(this->err); }
 
   public:
+    ~Result()
+    {
+        if (this->is_Error)
+            this->err.~E();
+        else
+            this->val.~T();
+    }
+
     constexpr Result(const Result &) = default;
     constexpr Result(Result &&) = default;
     constexpr Result &operator=(const Result &) = default;
@@ -915,6 +931,12 @@ class [[nodiscard("Result must be handled.")]] Result<T &, E>
     constexpr E &&err_unchecked() && { return std::move(this->err); }
 
   public:
+    ~Result()
+    {
+        if (this->is_Error)
+            this->err.~E();
+    }
+
     constexpr Result(const Result &) = default;
     constexpr Result(Result &&) = default;
     constexpr Result &operator=(const Result &) = default;
@@ -1118,6 +1140,12 @@ class [[nodiscard("Result must be handled.")]] Result<void, E>
     constexpr E &&err_unchecked() && { return std::move(this->err); }
 
   public:
+    ~Result()
+    {
+        if (this->is_Error)
+            this->err.~E();
+    }
+
     constexpr Result(const Result &) = default;
     constexpr Result(Result &&) = default;
     constexpr Result &operator=(const Result &) = default;
