@@ -76,20 +76,27 @@ int32 main()
     std::string test = "I am an epic test string!";
     auto        maybe = FindCharInString(test, 'a');
 
-    if (maybe.has_Value()) {
-        auto a = maybe.Unwrap();
+    if (maybe.is_some()) {
+        auto a = maybe.unwrap();
 
         std::printf("Found '%c' at index %i!\n", a.c, a.indx);
     } else {
         std::printf("Nothing found!\n");
     }
 
-    auto &str = GetString(0).Unwrap();
+    auto &str = GetString(0).unwrap();
     assert(str == test1);
     assert(std::addressof(str) == &test1);
 
     auto other_str = GetString(29);
-    assert(other_str.has_Value() == false);
+    assert(other_str.is_some() == false && other_str.is_none() == true);
+
+    int32 number = 18;
+    auto  thing = cy::Maybe(cy::Some(number));
+    auto  other_thing = thing.map<float32>(
+        [](auto value) { return static_cast<float32>(value); });
+
+    assert(number == other_thing.get());
 
     return 0;
 }
