@@ -218,6 +218,15 @@ class Some<T &>
     inline constexpr T &get() & { return *this->val; }
 };
 
+/**
+ * @attention This is a template specialization for `T&`. Working with
+ * references directly is tricky, so both `Some<T&>` and `Maybe<T&>` hold `T*`
+ * instead of an actual reference.
+ * @brief `Some` value of type `T&`.
+ *
+ * @ref Some<T&>
+ * @ref Some<T>
+ */
 template<typename T>
 class Maybe<T &>
 {
