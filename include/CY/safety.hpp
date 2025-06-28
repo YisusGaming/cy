@@ -77,7 +77,11 @@ class Maybe
 
     inline T const &get_unchecked() const & { return this->value; }
     inline T       &get_unchecked()       &{ return this->value; }
-    inline T      &&unwrap_unchecked() { return std::move(this->value); }
+    inline T      &&unwrap_unchecked()
+    {
+        this->has_value = false;
+        return std::move(this->value);
+    }
 
   public:
     constexpr Maybe(Some<T> some)
@@ -133,7 +137,6 @@ class Maybe
         if (!this->has_value)
             throw std::runtime_error("Called .unwrap() on a none value");
 
-        this->has_value = false;
         return this->unwrap_unchecked();
     }
 
@@ -141,7 +144,6 @@ class Maybe
     Maybe<U> map(std::function<U(T)> func)
     {
         if (this->has_value) {
-            this->has_value = false;
             return Some(func(this->unwrap_unchecked()));
         }
 
@@ -157,7 +159,11 @@ class Maybe<T &>
     bool has_value;
     T   *value;
 
-    inline T &unwrap_unchecked() { return *this->value; }
+    inline T &unwrap_unchecked()
+    {
+        this->has_value = false;
+        return *this->value;
+    }
 
   public:
     constexpr Maybe(Some<T &> some)
@@ -189,7 +195,6 @@ class Maybe<T &>
         if (!this->has_value)
             throw std::runtime_error("Called .unwrap() on a none value");
 
-        this->has_value = false;
         return this->unwrap_unchecked();
     }
 
@@ -197,7 +202,6 @@ class Maybe<T &>
     Maybe<U> map(std::function<U(T &)> func)
     {
         if (this->has_value) {
-            this->has_value = false;
             return Some(func(this->unwrap_unchecked()));
         }
 
