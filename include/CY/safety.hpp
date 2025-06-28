@@ -30,7 +30,7 @@ class Some
   public:
     friend Maybe<T>;
 
-    constexpr Some(T value)
+    explicit constexpr Some(T value)
         : val(std::move(value))
     {
     }
@@ -136,7 +136,7 @@ class Some<T &>
   public:
     friend Maybe<T &>;
 
-    constexpr Some(T &value)
+    explicit constexpr Some(T &value)
         : val(&value)
     {
     }
@@ -211,7 +211,7 @@ class Ok
     T value;
 
   public:
-    constexpr Ok(T v)
+    explicit constexpr Ok(T v)
         : value(std::move(v))
     {
     }
@@ -231,7 +231,7 @@ class Err
     E err;
 
   public:
-    constexpr Err(E error)
+    explicit constexpr Err(E error)
         : err(std::move(error))
     {
     }
