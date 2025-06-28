@@ -241,6 +241,22 @@ class Err
     inline E      &&take() { return std::move(this->err); }
 };
 
+#define CHECK_IF_VALID_T(func)                                                 \
+    if (this->is_error)                                                        \
+        throw std::runtime_error("Called " func " on an error value");         \
+    if (!this->has_data)                                                       \
+        throw std::runtime_error(                                              \
+            "Called " func                                                     \
+            " on a moved value (Result had T, but was unwrapped)");
+
+#define CHECK_IF_VALID_E(func)                                                 \
+    if (!this->is_error)                                                       \
+        throw std::runtime_error("Called " func " on an ok value");            \
+    if (!this->has_data)                                                       \
+        throw std::runtime_error(                                              \
+            "Called " func                                                     \
+            " on a moved value (Result had E, but was unwrapped)");
+
 template<typename T, typename E>
 class [[nodiscard("Result must be handled.")]] Result
 {
@@ -295,21 +311,8 @@ class [[nodiscard("Result must be handled.")]] Result
     {
     }
 
-#define CHECK_IF_VALID_T(func)                                                 \
-    if (this->is_error)                                                        \
-        throw std::runtime_error("Called " func " on an error value");         \
-    if (!this->has_data)                                                       \
-        throw std::runtime_error(                                              \
-            "Called " func                                                     \
-            " on a moved value (Result had T, but was unwrapped)");
-
-#define CHECK_IF_VALID_E(func)                                                 \
-    if (!this->is_error)                                                       \
-        throw std::runtime_error("Called " func " on an ok value");            \
-    if (!this->has_data)                                                       \
-        throw std::runtime_error(                                              \
-            "Called " func                                                     \
-            " on a moved value (Result had E, but was unwrapped)");
+    inline constexpr bool is_err() const { return this->is_error; }
+    inline constexpr bool is_ok() const { return !this->is_err(); }
 
     constexpr T const &get() const &
     {
@@ -356,10 +359,207 @@ class [[nodiscard("Result must be handled.")]] Result
     constexpr Maybe<T> ok()
     {
         if (!this->is_error && this->has_data) {
-            return Some(this->unwrap_unchecked());
+            return Some<T>(this->unwrap_unchecked());
         }
 
         return None();
+    }
+
+    constexpr Maybe<E> err()
+    {
+        if (this->is_error && this->has_data) {
+            return Some<E>(this->unwrap_err_unchecked());
+        }
+
+        return None();
+    }
+};
+
+template<typename T>
+class Ok<T &>
+{
+  private:
+    T *value;
+
+  public:
+    explicit constexpr Ok(T &v)
+        : value(&v)
+    {
+    }
+
+    inline T &take() { return *this->value; }
+};
+
+template<typename T, typename E>
+class [[nodiscard("Result must be handled.")]] Result<T &, E>
+{
+  private:
+    bool is_error;
+    bool has_data;
+
+    union
+    {
+        T *value;
+        E  error;
+    };
+
+    inline E const &get_err_unchecked() const & { return this->error; }
+    inline E       &get_err_unchecked()       &{ return this->error; }
+
+    inline T &unwrap_unchecked()
+    {
+        this->has_data = false;
+        return *this->value;
+    }
+
+    inline E &&unwrap_err_unchecked()
+    {
+        this->has_data = false;
+        return std::move(this->error);
+    }
+
+  public:
+    ~Result()
+    {
+        if (this->is_error && this->has_data)
+            this->error.~E();
+    }
+
+    constexpr Result(Ok<T &> ok)
+        : is_error(false)
+        , has_data(true)
+        , value(&ok.take())
+    {
+    }
+
+    constexpr Result(Err<E> err)
+        : is_error(true)
+        , has_data(true)
+        , error(err.take())
+    {
+    }
+
+    inline constexpr bool is_err() const { return this->is_error; }
+    inline constexpr bool is_ok() const { return !this->is_err(); }
+
+    constexpr E const &get_err() const &
+    {
+        CHECK_IF_VALID_E(".get_err()");
+
+        return this->get_err_unchecked();
+    }
+
+    constexpr E &get_err() &
+    {
+        CHECK_IF_VALID_E(".get_err()");
+
+        return this->get_err_unchecked();
+    }
+
+    constexpr T &unwrap()
+    {
+        CHECK_IF_VALID_T(".unwrap()");
+
+        return this->unwrap_unchecked();
+    }
+
+    constexpr E &&unwrap_err()
+    {
+        CHECK_IF_VALID_E(".unwrap_err()");
+
+        return this->unwrap_err_unchecked();
+    }
+
+    constexpr Maybe<T &> ok()
+    {
+        if (!this->is_error && this->has_data) {
+            return Some<T &>(this->unwrap_unchecked());
+        }
+
+        return None();
+    }
+
+    constexpr Maybe<E> err()
+    {
+        if (this->is_error && this->has_data) {
+            return Some<E>(this->unwrap_err_unchecked());
+        }
+
+        return None();
+    }
+};
+
+template<>
+class Ok<void>
+{
+  public:
+    constexpr Ok() = default;
+};
+Ok() -> Ok<void>;
+
+template<typename E>
+class [[nodiscard("Result must be handled.")]] Result<void, E>
+{
+  private:
+    bool is_error;
+    bool has_data;
+
+    union
+    {
+        E error;
+    };
+
+    inline E const &get_err_unchecked() const & { return this->error; }
+    inline E       &get_err_unchecked()       &{ return this->error; }
+
+    inline E &&unwrap_err_unchecked()
+    {
+        this->has_data = false;
+        return std::move(this->error);
+    }
+
+  public:
+    ~Result()
+    {
+        if (this->is_error && this->has_data)
+            this->error.~E();
+    }
+
+    constexpr Result(Ok<void>)
+        : is_error(false)
+        , has_data(true)
+    {
+    }
+
+    constexpr Result(Err<E> err)
+        : is_error(true)
+        , has_data(true)
+        , error(err.take())
+    {
+    }
+
+    inline constexpr bool is_err() const { return this->is_error; }
+    inline constexpr bool is_ok() const { return !this->is_err(); }
+
+    constexpr E const &get_err() const &
+    {
+        CHECK_IF_VALID_E(".get_err()");
+
+        return this->get_err_unchecked();
+    }
+
+    constexpr E &get_err() &
+    {
+        CHECK_IF_VALID_E(".get_err()");
+
+        return this->get_err_unchecked();
+    }
+
+    constexpr E &&unwrap_err()
+    {
+        CHECK_IF_VALID_E(".unwrap_err()");
+
+        return this->unwrap_err_unchecked();
     }
 
     constexpr Maybe<E> err()

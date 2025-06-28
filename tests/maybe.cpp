@@ -73,6 +73,9 @@ cy::Maybe<std::string &> GetString(usize indx)
 
 int32 main()
 {
+    std::printf("\n-----------------------TESTING: "
+                "Maybe-------------------------\n\n");
+
     std::string test = "I am an epic test string!";
     auto        maybe = FindCharInString(test, 'a');
 
@@ -97,6 +100,8 @@ int32 main()
         [](auto value) { return static_cast<float32>(value); });
 
     assert(number == other_thing.get());
+    std::printf("%i == %.2f succeeded!\n", number, other_thing.get());
 
+    std::printf("\n-----------------------OK-------------------------\n");
     return 0;
 }

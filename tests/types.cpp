@@ -5,7 +5,6 @@
 
 struct Vec2
 {
-
     f64 x;
     f64 y;
 
@@ -34,6 +33,9 @@ struct Vec2
 
 i32 main(void)
 {
+    std::printf("\n-----------------------TESTING: "
+                "Types-------------------------\n\n");
+
     Vec2 a(16, 16);
     Vec2 b(48, 48);
 
@@ -45,5 +47,7 @@ i32 main(void)
 
     f64 distance = a.DistanceFrom(b);
     std::printf("The distance between A and B is %.2f.\n", distance);
+
+    std::printf("\n-----------------------OK-------------------------\n");
     return 0;
 }
