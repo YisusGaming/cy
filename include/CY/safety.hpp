@@ -1,9 +1,9 @@
 /**
  * @file safety.hpp
  * @author Jesús Blanco
- * @brief General code safety with value/error or value/none classes.
- * @version 1.0.0
- * @date 2025-04-19
+ * @brief General code safety with value/error and value/none classes.
+ * @version 2.0.0
+ * @date 2025-06-27
  *
  * @copyright Copyright (c) Jesús Blanco. See LICENSE for details.
  *
@@ -12,20 +12,17 @@
 #pragma once
 
 #include <algorithm>
-#include <exception>
+#include <functional>
+#include <stdexcept>
 #include <type_traits>
 namespace cy {
 template<typename T>
 class Maybe;
 
 /**
- * @brief `Some` owns a value of type `T`.
+ * @brief `Some` value of type `T`.
  *
- * @tparam T The type of value owned by `Some`.
- * @sa @ref None
- * @sa @ref Maybe<T>
- *
- * @since v1.0.0
+ * @ref Maybe<T>
  */
 template<typename T>
 class Some
@@ -36,58 +33,162 @@ class Some
     T val;
 
   public:
-    /**
-     * @brief Constructs a new `Some` by copying `val`.
-     *
-     * @sa @ref None
-     * @sa @ref Maybe<T>
-     *
-     * @since v1.0.0
-     */
-    explicit constexpr Some(T const &val)
-        : val(val)
-    {
-    }
-    /**
-     * @brief Constructs a new `Some` by moving `val`.
-     *
-     * @sa @ref None
-     * @sa @ref Maybe<T>
-     *
-     * @since v1.0.0
-     */
-    explicit constexpr Some(T &&val)
-        : val(std::move(val))
+    friend Maybe<T>;
+
+    explicit constexpr Some(T value)
+        : val(std::move(value))
     {
     }
 
     /**
-     * @return Gets a const reference (`T const&`) to the value owned by `Some`.
-     * @since v1.0.0
+     * @brief Gets a const reference to `T` (`T const&`).
      */
-    constexpr T const &get() const & { return this->val; }
+    inline constexpr T const &get() const & { return this->val; }
     /**
-     * @return Gets a reference (`T&`) to the value owned by `Some`.
-     * @since v1.0.0
+     * @brief Gets a reference to `T` (`T&`).
      */
-    constexpr T &get() & { return this->val; }
+    inline constexpr T &get() & { return this->val; }
     /**
-     * @return Moves the value out of `Some`.
-     * @since v1.0.0
+     * @brief Gets an rvalue reference to `T` (`T&&`), allowing to move it out
+     * of `Some`.
      */
-    constexpr T &&get() && { return std::move(this->val); }
+    inline const T &&take() { return std::move(this->val); }
 };
 
 /**
- * @attention This is a template specialization for `T&`. `Some<T&>` holds a
- * pointer to `T` in order to initialize `Maybe<T&>`, which requires a `T*`.
- * @brief Contains a reference to `T`.
+ * @brief Represents the absence of a value.
  *
- * @tparam T The type of value.
- * @sa @ref None
- * @sa @ref Maybe<T>
+ */
+class None
+{
+  public:
+    constexpr None() = default;
+};
+
+/**
+ * @brief `Maybe<T>` represents a value that might or might not exist. If it's
+ * `Some<T>`, then the value exists. If it is `None`, then it does not exist.
+ */
+template<typename T>
+class Maybe
+{
+    static_assert(!std::is_void_v<T>, "Maybe<void> is invalid.");
+
+  private:
+    bool has_value;
+    union
+    {
+        T value;
+    };
+
+    inline T const &get_unchecked() const & { return this->value; }
+    inline T       &get_unchecked()       &{ return this->value; }
+    inline T      &&unwrap_unchecked()
+    {
+        this->has_value = false;
+        return std::move(this->value);
+    }
+
+  public:
+    ~Maybe()
+    {
+        if (this->has_value)
+            this->value.~T();
+    }
+
+    constexpr Maybe(Some<T> some)
+        : has_value(true)
+        , value(std::move(some.val))
+    {
+    }
+
+    constexpr Maybe(None)
+        : has_value(false)
+    {
+    }
+
+    constexpr Maybe()
+        : has_value(false)
+    {
+    }
+
+    /**
+     * @brief Whether this `Maybe<T>` is `Some<T>`.
+     *
+     * @return true If it is.
+     * @return false If it isn't.
+     */
+    inline constexpr bool is_some() const { return this->has_value; }
+    /**
+     * @brief Opposite of `is_some`.
+     */
+    inline constexpr bool is_none() const { return !this->is_some(); }
+
+    /**
+     * @brief Gets a const reference to `T` (`T const&`).
+     *
+     * @exception std::runtime_error Thrown if `Maybe<T>` doesn't actually have
+     * a value.
+     */
+    constexpr T const &get() const &
+    {
+        if (!this->has_value)
+            throw std::runtime_error("Called .get() on a none value");
+
+        return this->get_unchecked();
+    }
+    /**
+     * @brief Gets a reference to `T` (`T&`).
+     *
+     * @exception std::runtime_error Thrown if `Maybe<T>` doesn't actually have
+     * a value.
+     */
+    constexpr T &get() &
+    {
+        if (!this->has_value)
+            throw std::runtime_error("Called .get() on a none value");
+
+        return this->get_unchecked();
+    }
+    /**
+     * @brief Unwraps the value in `Maybe<T>`, allowing to move it out.
+     *
+     * @exception std::runtime_error Thrown if `Maybe<T>` doesn't actually have
+     * a value.
+     */
+    constexpr T &&unwrap()
+    {
+        if (!this->has_value)
+            throw std::runtime_error("Called .unwrap() on a none value");
+
+        return this->unwrap_unchecked();
+    }
+
+    /**
+     * @brief Maps a `Maybe<T>` to a `Maybe<U>` by taking a function that maps
+     * `T` to `U` and running it if `Maybe<T>` is `Some<T>`.
+     *
+     * @param func Function mapping `T` to `U`.
+     */
+    template<typename U>
+    Maybe<U> map(std::function<U(T)> func)
+    {
+        if (this->has_value) {
+            return Some(func(this->unwrap_unchecked()));
+        }
+
+        return None();
+    }
+};
+
+/**
+ * @attention This is a template specialization for `T&`. Working with
+ * references directly is tricky, so both `Some<T&>` and `Maybe<T&>` hold `T*`
+ * instead of an actual reference.
+ * @brief `Some` value of type `T&`.
  *
- * @since v1.0.0
+ * @ref Maybe<T&>
+ * @ref Some<T>
  */
 template<typename T>
 class Some<T &>
@@ -100,210 +201,31 @@ class Some<T &>
   public:
     friend Maybe<T &>;
 
-    /**
-     * @brief Initializes the reference in `Some`.
-     * @since v1.0.0
-     */
     explicit constexpr Some(T &value)
         : val(&value)
     {
     }
 
     /**
-     * @return Gets a const reference (`T const&`) to the value.
-     * @since v1.0.0
+     * @brief Gets a const reference to `T` (`T const&`).
+     *
      */
-    constexpr T const &get() const & { return *this->val; }
+    inline constexpr T const &get() const & { return *this->val; }
     /**
-     * @return Gets a reference (`T&`) to the value.
-     * @since v1.0.0
+     * @brief Gets a reference to `T` (`T &`).
+     *
      */
-    constexpr T &get() & { return *this->val; }
+    inline constexpr T &get() & { return *this->val; }
 };
 
 /**
- * @brief `None` represents the absence of a value. It stores nothing...
+ * @attention This is a template specialization for `T&`. Working with
+ * references directly is tricky, so both `Some<T&>` and `Maybe<T&>` hold `T*`
+ * instead of an actual reference.
+ * @brief `Some` value of type `T&`.
  *
- * @sa @ref Some<T>
- * @sa @ref Maybe<T>
- *
- * @since v1.0.0
- */
-class None
-{
-  public:
-    constexpr None() = default;
-};
-
-/**
- * @brief `Maybe` is used to handle cases where a value of type `T` might or
- * might not exist.
- *
- * If constructed with `Some<T>`, `Maybe<T>` will now own the value of type `T`.
- *
- * @sa @ref None
- * @sa @ref Some<T>
- *
- * @since v1.0.0
- */
-template<typename T>
-class Maybe
-{
-    static_assert(!std::is_void_v<T>, "Maybe<void> is invalid.");
-
-  private:
-    T    val;
-    bool has_Val;
-
-    /**
-     * @return Gets a const reference (`T const&`) to the value owned by
-     * `Maybe<T>` without checking if it's actually got a value.
-     * @since v1.0.0
-     */
-    constexpr T const &some_unchecked() const & { return this->val; }
-    /**
-     * @return Gets a reference (`T&`) to the value owned by
-     * `Maybe<T>` without checking if it's actually got a value.
-     * @since v1.0.0
-     */
-    constexpr T &some_unchecked() & { return this->val; }
-    /**
-     * @return Moves the value out of `Maybe<T>` without checking if it's
-     * actually got a value.
-     * @since v1.0.0
-     */
-    constexpr T &&some_unchecked() && { return std::move(this->val); }
-
-  public:
-    ~Maybe()
-    {
-        if (this->has_Val)
-            this->val.~T();
-    }
-
-    constexpr Maybe(const Maybe &) = default;
-    constexpr Maybe(Maybe &&) = default;
-    constexpr Maybe &operator=(const Maybe &) = default;
-    constexpr Maybe &operator=(Maybe &&) = default;
-
-    /**
-     * @brief Constructs a `Maybe<T>` with a value (`Some<T>` case).
-     * @sa @ref Some<T>
-     * @since v1.0.0
-     */
-    constexpr Maybe(Some<T> val) noexcept
-        : val(std::move(val).get())
-        , has_Val(true)
-    {
-        if constexpr (std::is_class_v<T>) {
-            static_assert(
-                std::is_default_constructible_v<T>,
-                "Maybe<class T> requires T to be default constructible.");
-        }
-    }
-
-    /**
-     * @brief Constructs a `Maybe<T>` with nothing (`None` case).
-     * @sa @ref None
-     * @since v1.0.0
-     */
-    constexpr Maybe(None) noexcept
-        : has_Val(false)
-    {
-        if constexpr (std::is_class_v<T>) {
-            static_assert(
-                std::is_default_constructible_v<T>,
-                "Maybe<class T> requires T to be default constructible.");
-        }
-    }
-
-    /**
-     * @return true if `Maybe<T>` contains a value (`Some<T>` case).
-     * @return false if `Maybe<T>` contains nothing (`None` case).
-     */
-    constexpr bool has_Value() const { return this->has_Val; }
-    /**
-     * @return Gets a const reference (`T const&`) to the value owned by
-     * `Maybe<T>`.
-     *
-     * @exception std::exception Thrown if `Maybe<T>` doesn't actually have a
-     * value.
-     * @sa Some<T>
-     *
-     * @since v1.0.0
-     */
-    constexpr T const &Some() const &
-    {
-        if (!has_Value())
-            throw std::exception("Called Some() on a None value.");
-        return this->some_unchecked();
-    }
-    /**
-     * @return Gets a reference (`T&`) to the value owned by `Maybe<T>`.
-     *
-     * @exception std::exception Thrown if `Maybe<T>` doesn't actually have a
-     * value.
-     * @sa Some<T>
-     *
-     * @since v1.0.0
-     */
-    constexpr T &Some() &
-    {
-        if (!has_Value())
-            throw std::exception("Called Some() on a None value.");
-        return this->some_unchecked();
-    }
-    /**
-     * @brief Creates a new object of type `T` by copying it from the one owned
-     * by `Maybe<T>`
-     * @remark `T` must be copy constructible.
-     * @return A new object of type `T`.
-     *
-     * @exception std::exception Thrown if `Maybe<T>` doesn't actually have a
-     * value.
-     * @sa Some<T>
-     *
-     * @since v1.0.0
-     */
-    constexpr T CloneSome() const &
-    {
-        static_assert(std::is_copy_constructible_v<T>,
-                      "CloneSome() requires T to be copyable.");
-
-        if (!has_Value())
-            throw std::exception("Called CloneSome() on a None value.");
-        return this->some_unchecked();
-    }
-    /**
-     * @return Moves the value out of `Maybe<T>`.
-     *
-     * @exception std::exception Thrown if `Maybe<T>` doesn't actually have a
-     * value.
-     * @sa Some<T>
-     *
-     * @since v1.0.0
-     */
-    constexpr T &&Unwrap()
-    {
-        if (!has_Value())
-            throw std::exception("Called Unwrap() on a None value.");
-
-        return std::move(*this).some_unchecked();
-    }
-};
-
-/**
- * @attention This is a template specialization for `T&`. Since `Maybe<T&>` may
- * be constructed without a value, it cannot actually hold a referece
- * (references must be initialized always). Instead, it holds a pointer to `T`
- * (`T*`).
- * @brief `Maybe` is used to handle cases where a value of type `T&` might or
- * might not exist.
- *
- * @sa @ref None
- * @sa @ref Some<T>
- *
- * @since v1.0.0
+ * @ref Some<T&>
+ * @ref Some<T>
  */
 template<typename T>
 class Maybe<T &>
@@ -311,222 +233,514 @@ class Maybe<T &>
     static_assert(!std::is_void_v<T>, "Maybe<void> is invalid.");
 
   private:
-    T   *val;
-    bool has_Val;
+    bool has_value;
+    T   *value;
 
-    /**
-     * @return Gets the const reference (`T const&`) stored by `Maybe<T&>`
-     * without checking if it's actually got a reference.
-     * @since v1.0.0
-     */
-    constexpr T const &some_unchecked() const & { return *this->val; }
-    /**
-     * @return Gets the reference (`T &`) stored by `Maybe<T&>` without checking
-     * if it's actually got a reference.
-     * @since v1.0.0
-     */
-    constexpr T &some_unchecked() & { return *this->val; }
-    /**
-     * @return Moves the reference (`T &`) out of `Maybe<T&>` without checking
-     * if it's actually got a reference.
-     * @since v1.0.0
-     */
-    constexpr T &some_unchecked() && { return *this->val; }
+    inline T &unwrap_unchecked()
+    {
+        this->has_value = false;
+        return *this->value;
+    }
 
   public:
-    ~Maybe() = default;
+    constexpr Maybe(Some<T &> some)
+        : has_value(true)
+        , value(some.val)
+    {
+    }
 
-    constexpr Maybe(const Maybe &) = default;
-    constexpr Maybe(Maybe &&) = default;
-    constexpr Maybe &operator=(const Maybe &) = default;
-    constexpr Maybe &operator=(Maybe &&) = default;
+    constexpr Maybe(None)
+        : has_value(false)
+    {
+    }
 
-    /**
-     * @brief Constructs a `Maybe<T&>` with a reference (`Some<T&>` case).
-     * @sa @ref Some<T&>
-     * @since v1.0.0
-     */
-    constexpr Maybe(Some<T &> val) noexcept
-        : val(val.val)
-        , has_Val(true)
+    constexpr Maybe()
+        : has_value(false)
     {
     }
 
     /**
-     * @brief Constructs a `Maybe<T&>` with nothing (`None` case).
-     * @sa @ref Some<T&>
-     * @since v1.0.0
+     * @brief Whether this `Maybe<T>` is `Some<T>`.
+     *
+     * @return true If it is.
+     * @return false If it isn't.
      */
-    constexpr Maybe(None) noexcept
-        : has_Val(false)
+    inline constexpr bool is_some() const { return this->has_value; }
+    /**
+     * @brief Opposite of `is_some`.
+     */
+    inline constexpr bool is_none() const { return !this->is_some(); }
+
+    /**
+     * @brief Unwraps the reference in `Maybe<T&>`, allowing to move it out.
+     *
+     * @exception std::runtime_error Thrown if `Maybe<T&>` doesn't actually have
+     * a reference.
+     */
+    constexpr T &unwrap()
     {
+        if (!this->has_value)
+            throw std::runtime_error("Called .unwrap() on a none value");
+
+        return this->unwrap_unchecked();
     }
 
     /**
-     * @return true if `Maybe<T&>` contains a value (`Some<T&>` case).
-     * @return false if `Maybe<T&>` contains nothing (`None` case).
-     */
-    constexpr bool has_Value() const { return this->has_Val; }
-    /**
-     * @return Gets the const reference (`T const&`) stored by `Maybe<T&>`.
+     * @brief Maps a `Maybe<T&>` to a `Maybe<U>` by taking a function that maps
+     * `T&` to `U` and running it if `Maybe<T&>` is `Some<T&>`.
      *
-     * @exception std::exception Thrown if `Maybe<T&>` doesn't actually have a
-     * reference.
-     * @sa Some<T&>
-     *
-     * @since v1.0.0
+     * @param func Function mapping `T&` to `U`.
      */
-    constexpr T const &Some() const &
+    template<typename U>
+    Maybe<U> map(std::function<U(T &)> func)
     {
-        if (!has_Value())
-            throw std::exception("Called Some() on a None value.");
+        if (this->has_value) {
+            return Some(func(this->unwrap_unchecked()));
+        }
 
-        return this->some_unchecked();
-    }
-    /**
-     * @return Gets the reference (`T&`) stored by `Maybe<T&>`.
-     *
-     * @exception std::exception Thrown if `Maybe<T&>` doesn't actually have a
-     * reference.
-     * @sa Some<T&>
-     *
-     * @since v1.0.0
-     */
-    constexpr T &Some() &
-    {
-        if (!has_Value())
-            throw std::exception("Called Some() on a None value.");
-
-        return this->some_unchecked();
-    }
-    /**
-     * @return Moves the reference (`T&`) out of `Maybe<T&>`.
-     *
-     * @exception std::exception Thrown if `Maybe<T&>` doesn't actually have a
-     * reference.
-     * @sa Some<T&>
-     *
-     * @since v1.0.0
-     */
-    constexpr T &Unwrap()
-    {
-        if (!has_Value())
-            throw std::exception("Called Unwrap() on a None value.");
-
-        return std::move(*this).some_unchecked();
+        return None();
     }
 };
 
 /**
- * @brief `Ok<T>` owns a value of type `T`, representing success.
- *
- * @tparam T The type of value owned by `Ok<T>`.
- * @sa @ref Err<E>
- * @sa @ref Result<T, E>
- *
- * @since v1.0.0
+ * @brief An Ok value.
+ * @ref Result<T, E>
  */
 template<typename T>
 class Ok
 {
   private:
-    T val;
+    T value;
 
   public:
-    /**
-     * @brief Constructs a new `Ok<T>` by copying `value`.
-     *
-     * @sa @ref Err<E>
-     * @sa @ref Result<T, E>
-     *
-     * @since v1.0.0
-     */
-    explicit constexpr Ok(T const &value)
-        : val(value)
-    {
-    }
-    /**
-     * @brief Constructs a new `Ok<T>` by moving `value`.
-     *
-     * @sa @ref Err<E>
-     * @sa @ref Result<T, E>
-     *
-     * @since v1.0.0
-     */
-    explicit constexpr Ok(T &&value)
-        : val(std::move(value))
+    explicit constexpr Ok(T v)
+        : value(std::move(v))
     {
     }
 
     /**
-     * @return Gets a const reference (`T const&`) to the value owned by
-     * `Ok<T>`.
-     * @since v1.0.0
+     * @brief Gets a const reference to `T` (`T const&`).
+     *
      */
-    constexpr T const &get() const & { return this->val; }
+    inline T const &get() const & { return this->value; }
     /**
-     * @return Gets a reference (`T&`) to the value owned by `Ok<T>`.
-     * @since v1.0.0
+     * @brief Gets a reference to `T` (`T &`).
+     *
      */
-    constexpr T &get() & { return this->val; }
+    inline T &get() & { return this->value; }
     /**
-     * @return Moves the value out of `Ok<T>`.
-     * @since v1.0.0
+     * @brief Gets an rvalue reference to `T` (`T&&`), allowing to move it out
+     * of `Ok`.
      */
-    constexpr T &&get() && { return std::move(this->val); }
+    inline T &&take() { return std::move(this->value); }
+};
+/**
+ * @brief An Err value.
+ * @ref Result<T, E>
+ */
+template<typename E>
+class Err
+{
+    static_assert(!std::is_void_v<E>,
+                  "Result<T, void> is invalid. Use Maybe<T> instead.");
+
+  private:
+    E err;
+
+  public:
+    explicit constexpr Err(E error)
+        : err(std::move(error))
+    {
+    }
+
+    /**
+     * @brief Gets a const reference to `E` (`E const&`).
+     *
+     */
+    inline E const &get() const & { return this->err; }
+    /**
+     * @brief Gets a reference to `E` (`E &`).
+     *
+     */
+    inline E &get() & { return this->err; }
+    /**
+     * @brief Gets an rvalue reference to `E` (`E&&`), allowing to move it out
+     * of `Err`.
+     */
+    inline E &&take() { return std::move(this->err); }
 };
 
-template<typename T, typename E>
-class Result;
+#define CHECK_IF_VALID_T(func)                                                 \
+    if (this->is_error)                                                        \
+        throw std::runtime_error("Called " func " on an error value");         \
+    if (!this->has_data)                                                       \
+        throw std::runtime_error(                                              \
+            "Called " func                                                     \
+            " on a moved value (Result had T, but was unwrapped)");
+
+#define CHECK_IF_VALID_E(func)                                                 \
+    if (!this->is_error)                                                       \
+        throw std::runtime_error("Called " func " on an ok value");            \
+    if (!this->has_data)                                                       \
+        throw std::runtime_error(                                              \
+            "Called " func                                                     \
+            " on a moved value (Result had E, but was unwrapped)");
 
 /**
- * @attention This is a template specialization for `T&`. `Ok<T&>` holds a
- * pointer to `T` in order to initialize `Result<T&, E>`, which requires a `T*`.
- * @brief Contains a reference to `T`.
- *
- * @tparam T The type of value.
- * @sa @ref Err<E>
- * @sa @ref Result<T&, E>
- *
- * @since v1.0.0
+ * @brief Class representing a value/error situation.
+ * @ref Ok<T>
+ * @ref Err<E>
+ */
+template<typename T, typename E>
+class [[nodiscard("Result must be handled.")]] Result
+{
+    static_assert(!std::is_void_v<E>,
+                  "Result<T, void> is invalid. Use Maybe<T> instead.");
+
+  private:
+    bool is_error;
+    bool has_data;
+
+    union
+    {
+        T value;
+        E error;
+    };
+
+    inline T const &get_unchecked() const & { return this->value; }
+    inline T       &get_unchecked()       &{ return this->value; }
+
+    inline E const &get_err_unchecked() const & { return this->error; }
+    inline E       &get_err_unchecked()       &{ return this->error; }
+
+    inline T &&unwrap_unchecked()
+    {
+        this->has_data = false;
+        return std::move(this->value);
+    }
+
+    inline E &&unwrap_err_unchecked()
+    {
+        this->has_data = false;
+        return std::move(this->error);
+    }
+
+  public:
+    ~Result()
+    {
+        if (this->is_error && this->has_data)
+            this->error.~E();
+        else if (this->has_data)
+            this->value.~T();
+    }
+
+    constexpr Result(Ok<T> ok)
+        : is_error(false)
+        , has_data(true)
+        , value(ok.take())
+    {
+    }
+
+    constexpr Result(Err<E> err)
+        : is_error(true)
+        , has_data(true)
+        , error(err.take())
+    {
+    }
+
+    /**
+     * @brief Whether this `Result<T, E>` is `Err<E>`.
+     *
+     * @return true If it is.
+     * @return false If it isn't.
+     */
+    inline constexpr bool is_err() const { return this->is_error; }
+    /**
+     * @brief Opposite of `is_err`.
+     */
+    inline constexpr bool is_ok() const { return !this->is_err(); }
+
+    /**
+     * @brief Gets a const reference to `T` (`T const&`).
+     *
+     * @exception std::runtime_error Thrown if `Result<T, E>` doesn't actually
+     * have a value.
+     */
+    constexpr T const &get() const &
+    {
+        CHECK_IF_VALID_T(".get()");
+
+        return this->get_unchecked();
+    }
+
+    /**
+     * @brief Gets a reference to `T` (`T&`).
+     *
+     * @exception std::runtime_error Thrown if `Result<T,E>` doesn't actually
+     * have a value.
+     */
+    constexpr T &get() &
+    {
+        CHECK_IF_VALID_T(".get()");
+
+        return this->get_unchecked();
+    }
+
+    /**
+     * @brief Gets a const reference to `E` (`E const&`).
+     *
+     * @exception std::runtime_error Thrown if `Result<T,E>` doesn't actually
+     * have an error.
+     */
+    constexpr E const &get_err() const &
+    {
+        CHECK_IF_VALID_E(".get_err()");
+
+        return this->get_err_unchecked();
+    }
+
+    /**
+     * @brief Gets a  reference to `E` (`E &`).
+     *
+     * @exception std::runtime_error Thrown if `Result<T,E>` doesn't actually
+     * have an error.
+     */
+    constexpr E &get_err() &
+    {
+        CHECK_IF_VALID_E(".get_err()");
+
+        return this->get_err_unchecked();
+    }
+
+    /**
+     * @brief Unwraps the value in `Result<T, E>`, allowing to move it out.
+     *
+     * @exception std::runtime_error Thrown if `Result<T, E>` doesn't actually
+     * have a value.
+     */
+    constexpr T &&unwrap()
+    {
+        CHECK_IF_VALID_T(".unwrap()");
+
+        return this->unwrap_unchecked();
+    }
+
+    /**
+     * @brief Unwraps the error in `Result<T, E>`, allowing to move it out.
+     *
+     * @exception std::runtime_error Thrown if `Result<T, E>` doesn't actually
+     * have an error.
+     */
+    constexpr E &&unwrap_err()
+    {
+        CHECK_IF_VALID_E(".unwrap_err()");
+
+        return this->unwrap_err_unchecked();
+    }
+
+    /**
+     * @brief Converts this result into a `Maybe<T>`, which will be `Some<T>` if
+     * `Result<T, E>` is `Ok<T>` and holds a valid `T`. `T` will me moved into
+     * `Maybe<T>`. Otherwise, `None`.
+     */
+    constexpr Maybe<T> ok()
+    {
+        if (!this->is_error && this->has_data) {
+            return Some<T>(this->unwrap_unchecked());
+        }
+
+        return None();
+    }
+
+    /**
+     * @brief Converts this result into a `Maybe<E>`, which will be `Some<E>` if
+     * `Result<T, E>` is `Err<E>` and holds a valid `E`. `E` will me moved into
+     * `Maybe<E>`. Otherwise, `None`.
+     */
+    constexpr Maybe<E> err()
+    {
+        if (this->is_error && this->has_data) {
+            return Some<E>(this->unwrap_err_unchecked());
+        }
+
+        return None();
+    }
+};
+
+/**
+ * @attention This is a template specialization for `T&`. Working with
+ * references directly is tricky, so both `Ok<T&>` and `Result<T&, E>` hold `T*`
+ * instead of an actual reference.
+ * @brief An Ok value.
+ * @ref Result<T, E>
  */
 template<typename T>
 class Ok<T &>
 {
   private:
-    T *val;
+    T *value;
 
   public:
-    /**
-     * @brief Initializes the reference in `Ok`.
-     * @since v1.0.0
-     */
-    explicit constexpr Ok(T &value)
-        : val(&value)
+    explicit constexpr Ok(T &v)
+        : value(&v)
     {
     }
 
     /**
-     * @return Gets a const reference (`T const&`) to the value.
-     * @since v1.0.0
+     * @brief Gets the reference to `T` (`T&`).
      */
-    constexpr T const &get() const & { return *this->val; }
+    inline T &take() { return *this->value; }
+};
+
+template<typename T, typename E>
+class [[nodiscard("Result must be handled.")]] Result<T &, E>
+{
+    static_assert(!std::is_void_v<E>,
+                  "Result<T, void> is invalid. Use Maybe<T> instead.");
+
+  private:
+    bool is_error;
+    bool has_data;
+
+    union
+    {
+        T *value;
+        E  error;
+    };
+
+    inline E const &get_err_unchecked() const & { return this->error; }
+    inline E       &get_err_unchecked()       &{ return this->error; }
+
+    inline T &unwrap_unchecked()
+    {
+        this->has_data = false;
+        return *this->value;
+    }
+
+    inline E &&unwrap_err_unchecked()
+    {
+        this->has_data = false;
+        return std::move(this->error);
+    }
+
+  public:
+    ~Result()
+    {
+        if (this->is_error && this->has_data)
+            this->error.~E();
+    }
+
+    constexpr Result(Ok<T &> ok)
+        : is_error(false)
+        , has_data(true)
+        , value(&ok.take())
+    {
+    }
+
+    constexpr Result(Err<E> err)
+        : is_error(true)
+        , has_data(true)
+        , error(err.take())
+    {
+    }
+
     /**
-     * @return Gets a reference (`T&`) to the value.
-     * @since v1.0.0
+     * @brief Whether this `Result<T&, E>` is `Err<E>`.
+     *
+     * @return true If it is.
+     * @return false If it isn't.
      */
-    constexpr T &get() & { return *this->val; }
+    inline constexpr bool is_err() const { return this->is_error; }
+    /**
+     * @brief Opposite of `is_err`.
+     */
+    inline constexpr bool is_ok() const { return !this->is_err(); }
+
+    /**
+     * @brief Gets a const reference to `E` (`E const&`).
+     *
+     * @exception std::runtime_error Thrown if `Result<T,E>` doesn't actually
+     * have an error.
+     */
+    constexpr E const &get_err() const &
+    {
+        CHECK_IF_VALID_E(".get_err()");
+
+        return this->get_err_unchecked();
+    }
+
+    /**
+     * @brief Gets a reference to `E` (`E &`).
+     *
+     * @exception std::runtime_error Thrown if `Result<T,E>` doesn't actually
+     * have an error.
+     */
+    constexpr E &get_err() &
+    {
+        CHECK_IF_VALID_E(".get_err()");
+
+        return this->get_err_unchecked();
+    }
+
+    /**
+     * @brief Unwraps the reference in `Result<T&, E>`, allowing to move it out.
+     *
+     * @exception std::runtime_error Thrown if `Result<T&, E>` doesn't actually
+     * have a reference.
+     */
+    constexpr T &unwrap()
+    {
+        CHECK_IF_VALID_T(".unwrap()");
+
+        return this->unwrap_unchecked();
+    }
+
+    /**
+     * @brief Unwraps the error in `Result<T, E>`, allowing to move it out.
+     *
+     * @exception std::runtime_error Thrown if `Result<T, E>` doesn't actually
+     * have an error.
+     */
+    constexpr E &&unwrap_err()
+    {
+        CHECK_IF_VALID_E(".unwrap_err()");
+
+        return this->unwrap_err_unchecked();
+    }
+
+    /**
+     * @brief Converts this result into a `Maybe<T>`, which will be `Some<T>` if
+     * `Result<T, E>` is `Ok<T>` and holds a valid `T`. `T` will me moved into
+     * `Maybe<T>`. Otherwise, `None`.
+     */
+    constexpr Maybe<T &> ok()
+    {
+        if (!this->is_error && this->has_data) {
+            return Some<T &>(this->unwrap_unchecked());
+        }
+
+        return None();
+    }
+
+    /**
+     * @brief Converts this result into a `Maybe<E>`, which will be `Some<E>` if
+     * `Result<T, E>` is `Err<E>` and holds a valid `E`. `E` will me moved into
+     * `Maybe<E>`. Otherwise, `None`.
+     */
+    constexpr Maybe<E> err()
+    {
+        if (this->is_error && this->has_data) {
+            return Some<E>(this->unwrap_err_unchecked());
+        }
+
+        return None();
+    }
 };
 
 /**
- * @attention This is a template specialization for when `Ok` is not required to
- * contain a value, it only represents a successful result.
- * @brief Initializes `Result<void, E>`.
- *
- * @sa @ref Err<E>
- * @sa @ref Result<T, E>
- *
- * @since v1.0.0
+ * @attention This is a template specialization for `void`.
+ * @brief A succeeded operation that doesn't actually return a value..
+ * @ref Result<T, E>
  */
 template<>
 class Ok<void>
@@ -536,726 +750,113 @@ class Ok<void>
 };
 Ok() -> Ok<void>;
 
-/**
- * @brief `Err<E>` owns an error of type `E` ('error' may be any kind of value,
- * really).
- *
- * @tparam T The error owned by `Err<E>`.
- * @sa @ref Ok<T>
- * @sa @ref Result<T, E>
- *
- * @since v1.0.0
- */
-template<typename E>
-class Err
-{
-    static_assert(!std::is_reference_v<E>, "Err<E> must own the error value.");
-
-  private:
-    E err;
-
-  public:
-    /**
-     * @brief Constructs a new `Err<E>` by copying `error`.
-     *
-     * @sa @ref Ok<T>
-     * @sa @ref Result<T, E>
-     *
-     * @since v1.0.0
-     */
-    explicit constexpr Err(E const &error)
-        : err(error)
-    {
-    }
-    /**
-     * @brief Constructs a new `Err<E>` by moving `error`.
-     *
-     * @sa @ref Ok<T>
-     * @sa @ref Result<T, E>
-     *
-     * @since v1.0.0
-     */
-    explicit constexpr Err(E &&error)
-        : err(std::move(error))
-    {
-    }
-
-    /**
-     * @return Gets a const reference (`T const&`) to the value owned by
-     * `Err<E>`.
-     * @since v1.0.0
-     */
-    constexpr E const &get() const & { return this->err; }
-    /**
-     * @return Gets a reference (`T&`) to the value owned by `Err<E>`.
-     * @since v1.0.0
-     */
-    constexpr E &get() & { return this->err; }
-    /**
-     * @return Moves the value out of `Err<E>`.
-     * @since v1.0.0
-     */
-    constexpr E &&get() && { return std::move(this->err); }
-};
-Err(char const[]) -> Err<char const *>;
-
-/**
- * @brief `Result<T, E>` is used to handle cases where an operation might
- * succeed (resulting in `Ok<T>`), or might fail with an error (resulting in
- * `Err<E>`).
- *
- * If constructed with `Ok<T>`, `Result<T, E>>` will now own the value of
- * type `T`. If constructed with `Err<E>`, `Result<T, E>>` will now own the
- * error of type `E`.
- *
- * @sa @ref Err<E>
- * @sa @ref Ok<T>
- *
- * @since v1.0.0
- */
-template<typename T, typename E>
-class [[nodiscard("Result must be handled.")]] Result
-{
-    static_assert(!std::is_reference_v<E>, "Err<E> must own the error value.");
-
-  private:
-    union
-    {
-        T val;
-        E err;
-    };
-    bool is_Error;
-
-    /**
-     * @return Gets a const reference (`T const&`) to the Ok value owned by
-     * `Result<T, E>` without checking if it's actually got a value.
-     * @since v1.0.0
-     */
-    constexpr T const &ok_unchecked() const & { return this->val; }
-    /**
-     * @return Gets a reference (`T&`) to the Ok value owned by
-     * `Result<T, E>` without checking if it's actually got a value.
-     * @since v1.0.0
-     */
-    constexpr T &ok_unchecked() & { return this->val; }
-    /**
-     * @return Moves the Ok value out of `Result<T, E>` without checking if it's
-     * actually got a value.
-     * @since v1.0.0
-     */
-    constexpr T &&ok_unchecked() && { return std::move(this->val); }
-
-    /**
-     * @return Gets a const reference (`T const&`) to the Error value owned by
-     * `Result<T, E>` without checking if it's actually got a value.
-     * @since v1.0.0
-     */
-    constexpr E const &err_unchecked() const & { return this->err; }
-    /**
-     * @return Gets a reference (`T&`) to the Error value owned by
-     * `Result<T, E>` without checking if it's actually got a value.
-     * @since v1.0.0
-     */
-    constexpr E &err_unchecked() & { return this->err; }
-    /**
-     * @return Moves the Error value out of `Result<T, E>` without checking if
-     * it's actually got a value.
-     * @since v1.0.0
-     */
-    constexpr E &&err_unchecked() && { return std::move(this->err); }
-
-  public:
-    ~Result()
-    {
-        if (this->is_Error)
-            this->err.~E();
-        else
-            this->val.~T();
-    }
-
-    constexpr Result(const Result &) = default;
-    constexpr Result(Result &&) = default;
-    constexpr Result &operator=(const Result &) = default;
-    constexpr Result &operator=(Result &&) = default;
-
-    /**
-     * @brief Constructs a `Result<T, E>` with an Ok value.
-     * @sa @ref Ok<T>
-     * @since v1.0.0
-     */
-    constexpr Result(Ok<T> value) noexcept
-        : val(std::move(value).get())
-        , is_Error(false)
-    {
-        if constexpr (std::is_class_v<T>) {
-            static_assert(
-                std::is_default_constructible_v<T>,
-                "Result<class T, E> requires T to be default constructible.");
-        }
-        if constexpr (std::is_class_v<E>) {
-            static_assert(
-                std::is_default_constructible_v<E>,
-                "Result<T, class E> requires E to be default constructible.");
-        }
-    }
-
-    /**
-     * @brief Constructs a `Result<T, E>` with an Error value.
-     * @sa @ref Err<E>
-     * @since v1.0.0
-     */
-    constexpr Result(Err<E> error) noexcept
-        : err(std::move(error).get())
-        , is_Error(true)
-    {
-        if constexpr (std::is_class_v<T>) {
-            static_assert(
-                std::is_default_constructible_v<T>,
-                "Result<class T, E> requires T to be default constructible.");
-        }
-        if constexpr (std::is_class_v<E>) {
-            static_assert(
-                std::is_default_constructible_v<E>,
-                "Result<T, class E> requires E to be default constructible.");
-        }
-    }
-
-    /**
-     * @return false if `Result<T, E>` contains a value (`Ok<T>` case).
-     * @return true if `Result<T, E>` contains an error (`Err<E>` case).
-     */
-    constexpr bool is_Err() const { return this->is_Error; }
-    /**
-     * @return Gets a const reference (`T const&`) to the Ok value owned by
-     * `Result<T, E>`.
-     *
-     * @exception std::exception Thrown if `Result<T, E>` doesn't actually have
-     * an Ok value.
-     * @sa Ok<T>
-     *
-     * @since v1.0.0
-     */
-    constexpr T const &Ok() const &
-    {
-        if (is_Err())
-            throw std::exception("Called Ok() on an Error value.");
-        return this->ok_unchecked();
-    }
-    /**
-     * @return Gets a reference (`T &`) to the Ok value owned by
-     * `Result<T, E>`.
-     *
-     * @exception std::exception Thrown if `Result<T, E>` doesn't actually have
-     * an Ok value.
-     * @sa Ok<T>
-     *
-     * @since v1.0.0
-     */
-    constexpr T &Ok() &
-    {
-        if (is_Err())
-            throw std::exception("Called Ok() on an Error value.");
-        return this->ok_unchecked();
-    }
-    /**
-     * @brief Creates a new object of type `T` by copying it from the one owned
-     * by `Result<T, E>`
-     * @remark `T` must be copy constructible.
-     * @return A new object of type `T`.
-     *
-     * @exception std::exception Thrown if `Result<T, E>` doesn't actually have
-     * an Ok value.
-     * @sa Ok<T>
-     *
-     * @since v1.0.0
-     */
-    constexpr T CloneOk() const &
-    {
-        static_assert(std::is_copy_constructible_v<T>,
-                      "CloneOk() requires T to be copyable.");
-
-        if (is_Err())
-            throw std::exception("Called CloneOk() on an Error value.");
-        return this->ok_unchecked();
-    }
-    /**
-     * @return Moves the ok value out of `Result<T, E>`.
-     *
-     * @exception std::exception Thrown if `Result<T, E>` doesn't actually have
-     * an Ok value.
-     * @sa Ok<T>
-     *
-     * @since v1.0.0
-     */
-    constexpr T &&Unwrap()
-    {
-        if (is_Err())
-            throw std::exception("Called Unwrap() on a Error value.");
-
-        return std::move(*this).ok_unchecked();
-    }
-
-    /**
-     * @return Gets a const reference (`E const&`) to the Error value owned by
-     * `Result<T, E>`.
-     *
-     * @exception std::exception Thrown if `Result<T, E>` doesn't actually have
-     * an Error value.
-     * @sa Err<E>
-     *
-     * @since v1.0.0
-     */
-    constexpr E const &Err() const &
-    {
-        if (!is_Err())
-            throw std::exception("Called Err() on an Ok value.");
-        return this->err_unchecked();
-    }
-    /**
-     * @return Gets a reference (`E &`) to the Error value owned by
-     * `Result<T, E>`.
-     *
-     * @exception std::exception Thrown if `Result<T, E>` doesn't actually have
-     * an Error value.
-     * @sa Err<E>
-     *
-     * @since v1.0.0
-     */
-    constexpr E &Err() &
-    {
-        if (!is_Err())
-            throw std::exception("Called Err() on an Ok value.");
-        return this->err_unchecked();
-    }
-    /**
-     * @brief Creates a new object of type `E` by copying it from the one owned
-     * by `Result<T, E>`
-     * @remark `E` must be copy constructible.
-     * @return A new object of type `E`.
-     *
-     * @exception std::exception Thrown if `Result<T, E>` doesn't actually have
-     * an Error value.
-     * @sa Err<E>
-     *
-     * @since v1.0.0
-     */
-    constexpr E CloneErr() const &
-    {
-        static_assert(std::is_copy_constructible_v<E>,
-                      "CloneErr() requires E to be copyable.");
-
-        if (!is_Err())
-            throw std::exception("Called CloneErr() on an Ok value.");
-        return this->err_unchecked();
-    }
-    /**
-     * @return Moves the Err value out of `Result<T, E>`.
-     *
-     * @exception std::exception Thrown if `Result<T, E>` doesn't actually have
-     * an Err value.
-     * @sa Err<E>
-     *
-     * @since v1.0.0
-     */
-    constexpr E &&UnwrapErr()
-    {
-        if (!is_Err())
-            throw std::exception("Called UnwrapErr() on a Ok value.");
-
-        return std::move(*this).err_unchecked();
-    }
-};
-
-/**
- * @brief `Result<T&, E>` is used to handle cases where an operation might
- * succeed (resulting in `Ok<T&>`), or might fail with an error (resulting in
- * `Err<E>`).
- *
- * If constructed with `Err<E>`, `Result<T, E>>` will now own the error of type
- * `E`.
- *
- * @sa @ref Err<E>
- * @sa @ref Ok<T&>
- *
- * @since v1.0.0
- */
-template<typename T, typename E>
-class [[nodiscard("Result must be handled.")]] Result<T &, E>
-{
-    static_assert(!std::is_reference_v<E>, "Err<E> must own the error value.");
-
-  private:
-    union
-    {
-        T *val;
-        E  err;
-    };
-    bool is_Error;
-
-    /**
-     * @return Gets the const reference (`T const&`) stored by `Result<T&, E>`
-     * without checking if it's actually got a reference.
-     * @since v1.0.0
-     */
-    constexpr T const &ok_unchecked() const & { return *this->val; }
-    /**
-     * @return Gets the reference (`T &`) stored by `Result<T&, E>` without
-     * checking if it's actually got a reference.
-     * @since v1.0.0
-     */
-    constexpr T &ok_unchecked() & { return *this->val; }
-    /**
-     * @return Moves the reference (`T &`) out of `Result<T&, E>` without
-     * checking if it's actually got a reference.
-     * @since v1.0.0
-     */
-    constexpr T &ok_unchecked() && { return *this->val; }
-
-    /**
-     * @return Gets a const reference (`T const&`) to the Error value owned by
-     * `Result<T, E>` without checking if it's actually got a value.
-     * @since v1.0.0
-     */
-    constexpr E const &err_unchecked() const & { return this->err; }
-    /**
-     * @return Gets a reference (`T&`) to the Error value owned by
-     * `Result<T, E>` without checking if it's actually got a value.
-     * @since v1.0.0
-     */
-    constexpr E &err_unchecked() & { return this->err; }
-    /**
-     * @return Moves the Error value out of `Result<T, E>` without checking if
-     * it's actually got a value.
-     * @since v1.0.0
-     */
-    constexpr E &&err_unchecked() && { return std::move(this->err); }
-
-  public:
-    ~Result()
-    {
-        if (this->is_Error)
-            this->err.~E();
-    }
-
-    constexpr Result(const Result &) = default;
-    constexpr Result(Result &&) = default;
-    constexpr Result &operator=(const Result &) = default;
-    constexpr Result &operator=(Result &&) = default;
-
-    /**
-     * @brief Constructs a `Result<T&, E>` with an Ok value.
-     * @sa @ref Ok<T&>
-     * @since v1.0.0
-     */
-    constexpr Result(Ok<T &> value) noexcept
-        : val(&value.get())
-        , is_Error(false)
-    {
-        if constexpr (std::is_class_v<E>) {
-            static_assert(
-                std::is_default_constructible_v<E>,
-                "Result<T, class E> requires E to be default constructible.");
-        }
-    }
-
-    /**
-     * @brief Constructs a `Result<T, E>` with an Error value.
-     * @sa @ref Err<E>
-     * @since v1.0.0
-     */
-    constexpr Result(Err<E> error) noexcept
-        : err(std::move(error).get())
-        , is_Error(true)
-    {
-        if constexpr (std::is_class_v<E>) {
-            static_assert(
-                std::is_default_constructible_v<E>,
-                "Result<T, class E> requires E to be default constructible.");
-        }
-    }
-
-    /**
-     * @return false if `Result<T, E>` contains a value (`Ok<T>` case).
-     * @return true if `Result<T, E>` contains an error (`Err<E>` case).
-     */
-    constexpr bool is_Err() const { return this->is_Error; }
-    /**
-     * @return Gets a const reference (`T const&`) to the Ok value owned by
-     * `Result<T, E>`.
-     *
-     * @exception std::exception Thrown if `Result<T, E>` doesn't actually have
-     * an Ok value.
-     * @sa Ok<T>
-     *
-     * @since v1.0.0
-     */
-    constexpr T const &Ok() const &
-    {
-        if (is_Err())
-            throw std::exception("Called Ok() on an Error value.");
-        return this->ok_unchecked();
-    }
-    /**
-     * @return Gets the reference (`T &`) in `Result<T, E>`.
-     *
-     * @exception std::exception Thrown if `Result<T, E>` doesn't actually have
-     * an Ok value.
-     * @sa Ok<T>
-     *
-     * @since v1.0.0
-     */
-    constexpr T &Ok() &
-    {
-        if (is_Err())
-            throw std::exception("Called Ok() on an Error value.");
-        return this->ok_unchecked();
-    }
-    /**
-     * @return Moves the reference out of `Result<T, E>`.
-     *
-     * @exception std::exception Thrown if `Result<T, E>` doesn't actually have
-     * an Ok value.
-     * @sa Ok<T>
-     *
-     * @since v1.0.0
-     */
-    constexpr T &Unwrap()
-    {
-        if (is_Err())
-            throw std::exception("Called Unwrap() on a Error value.");
-
-        return std::move(*this).ok_unchecked();
-    }
-
-    /**
-     * @return Gets a const reference (`E const&`) to the Error value owned by
-     * `Result<T, E>`.
-     *
-     * @exception std::exception Thrown if `Result<T, E>` doesn't actually have
-     * an Error value.
-     * @sa Err<E>
-     *
-     * @since v1.0.0
-     */
-    constexpr E const &Err() const &
-    {
-        if (!is_Err())
-            throw std::exception("Called Err() on an Ok value.");
-        return this->err_unchecked();
-    }
-    /**
-     * @return Gets a reference (`E &`) to the Error value owned by
-     * `Result<T, E>`.
-     *
-     * @exception std::exception Thrown if `Result<T, E>` doesn't actually have
-     * an Error value.
-     * @sa Err<E>
-     *
-     * @since v1.0.0
-     */
-    constexpr E &Err() &
-    {
-        if (!is_Err())
-            throw std::exception("Called Err() on an Ok value.");
-        return this->err_unchecked();
-    }
-    /**
-     * @brief Creates a new object of type `E` by copying it from the one owned
-     * by `Result<T, E>`
-     * @remark `E` must be copy constructible.
-     * @return A new object of type `E`.
-     *
-     * @exception std::exception Thrown if `Result<T, E>` doesn't actually have
-     * an Error value.
-     * @sa Err<E>
-     *
-     * @since v1.0.0
-     */
-    constexpr E CloneErr() const &
-    {
-        static_assert(std::is_copy_constructible_v<E>,
-                      "CloneErr() requires E to be copyable.");
-
-        if (!is_Err())
-            throw std::exception("Called CloneErr() on an Ok value.");
-        return this->err_unchecked();
-    }
-    /**
-     * @return Moves the Err value out of `Result<T, E>`.
-     *
-     * @exception std::exception Thrown if `Result<T, E>` doesn't actually have
-     * an Err value.
-     * @sa Err<E>
-     *
-     * @since v1.0.0
-     */
-    constexpr E &&UnwrapErr()
-    {
-        if (!is_Err())
-            throw std::exception("Called UnwrapErr() on a Ok value.");
-
-        return std::move(*this).err_unchecked();
-    }
-};
-
-/**
- * @brief `Result<void, E>` is used to handle cases where an operation might
- * succeed (resulting in `Ok<void>`), or might fail with an error (resulting in
- * `Err<E>`).
- *
- * If constructed with `Err<E>`, `Result<T, E>>` will now own the error of type
- * `E`.
- *
- * @sa @ref Err<E>
- * @sa @ref Ok<void>
- *
- * @since v1.0.0
- */
 template<typename E>
 class [[nodiscard("Result must be handled.")]] Result<void, E>
 {
-    static_assert(!std::is_reference_v<E>, "Err<E> must own the error value.");
+    static_assert(!std::is_void_v<E>,
+                  "Result<T, void> is invalid. Use Maybe<T> instead.");
 
   private:
-    E    err;
-    bool is_Error;
+    bool is_error;
+    bool has_data;
 
-    /**
-     * @return Gets a const reference (`T const&`) to the Error value owned by
-     * `Result<T, E>` without checking if it's actually got a value.
-     * @since v1.0.0
-     */
-    constexpr E const &err_unchecked() const & { return this->err; }
-    /**
-     * @return Gets a reference (`T&`) to the Error value owned by
-     * `Result<T, E>` without checking if it's actually got a value.
-     * @since v1.0.0
-     */
-    constexpr E &err_unchecked() & { return this->err; }
-    /**
-     * @return Moves the Error value out of `Result<T, E>` without checking if
-     * it's actually got a value.
-     * @since v1.0.0
-     */
-    constexpr E &&err_unchecked() && { return std::move(this->err); }
+    union
+    {
+        E error;
+    };
+
+    inline E const &get_err_unchecked() const & { return this->error; }
+    inline E       &get_err_unchecked()       &{ return this->error; }
+
+    inline E &&unwrap_err_unchecked()
+    {
+        this->has_data = false;
+        return std::move(this->error);
+    }
 
   public:
     ~Result()
     {
-        if (this->is_Error)
-            this->err.~E();
+        if (this->is_error && this->has_data)
+            this->error.~E();
     }
 
-    constexpr Result(const Result &) = default;
-    constexpr Result(Result &&) = default;
-    constexpr Result &operator=(const Result &) = default;
-    constexpr Result &operator=(Result &&) = default;
+    constexpr Result(Ok<void>)
+        : is_error(false)
+        , has_data(true)
+    {
+    }
+
+    constexpr Result(Err<E> err)
+        : is_error(true)
+        , has_data(true)
+        , error(err.take())
+    {
+    }
 
     /**
-     * @brief Constructs a `Result<T&, E>` with an Ok value.
-     * @sa @ref Ok<T&>
-     * @since v1.0.0
+     * @brief Whether this `Result<T, E>` is `Err<E>`.
+     *
+     * @return true If it is.
+     * @return false If it isn't.
      */
-    constexpr Result(Ok<void>) noexcept
-        : is_Error(false)
+    inline constexpr bool is_err() const { return this->is_error; }
+    /**
+     * @brief Opposite of `is_err`.
+     */
+    inline constexpr bool is_ok() const { return !this->is_err(); }
+
+    /**
+     * @brief Gets a const reference to `E` (`E const&`).
+     *
+     * @exception std::runtime_error Thrown if `Result<T,E>` doesn't actually
+     * have an error.
+     */
+    constexpr E const &get_err() const &
     {
-        if constexpr (std::is_class_v<E>) {
-            static_assert(
-                std::is_default_constructible_v<E>,
-                "Result<T, class E> requires E to be default constructible.");
+        CHECK_IF_VALID_E(".get_err()");
+
+        return this->get_err_unchecked();
+    }
+
+    /**
+     * @brief Gets a reference to `E` (`E &`).
+     *
+     * @exception std::runtime_error Thrown if `Result<T,E>` doesn't actually
+     * have an error.
+     */
+    constexpr E &get_err() &
+    {
+        CHECK_IF_VALID_E(".get_err()");
+
+        return this->get_err_unchecked();
+    }
+
+    /**
+     * @brief Unwraps the error in `Result<T, E>`, allowing to move it out.
+     *
+     * @exception std::runtime_error Thrown if `Result<T, E>` doesn't actually
+     * have an error.
+     */
+    constexpr E &&unwrap_err()
+    {
+        CHECK_IF_VALID_E(".unwrap_err()");
+
+        return this->unwrap_err_unchecked();
+    }
+
+    /**
+     * @brief Converts this result into a `Maybe<E>`, which will be `Some<E>` if
+     * `Result<T, E>` is `Err<E>` and holds a valid `E`. `E` will me moved into
+     * `Maybe<E>`. Otherwise, `None`.
+     */
+    constexpr Maybe<E> err()
+    {
+        if (this->is_error && this->has_data) {
+            return Some(this->unwrap_err_unchecked());
         }
-    }
 
-    /**
-     * @brief Constructs a `Result<T, E>` with an Error value.
-     * @sa @ref Err<E>
-     * @since v1.0.0
-     */
-    constexpr Result(Err<E> error) noexcept
-        : err(std::move(error).get())
-        , is_Error(true)
-    {
-        if constexpr (std::is_class_v<E>) {
-            static_assert(
-                std::is_default_constructible_v<E>,
-                "Result<T, class E> requires E to be default constructible.");
-        }
-    }
-
-    /**
-     * @return false if `Result<T, E>` contains a value (`Ok<T>` case).
-     * @return true if `Result<T, E>` contains an error (`Err<E>` case).
-     */
-    constexpr bool is_Err() const { return this->is_Error; }
-
-    /**
-     * @return Gets a const reference (`E const&`) to the Error value owned by
-     * `Result<T, E>`.
-     *
-     * @exception std::exception Thrown if `Result<T, E>` doesn't actually have
-     * an Error value.
-     * @sa Err<E>
-     *
-     * @since v1.0.0
-     */
-    constexpr E const &Err() const &
-    {
-        if (!is_Err())
-            throw std::exception("Called Err() on an Ok value.");
-        return this->err_unchecked();
-    }
-    /**
-     * @return Gets a reference (`E &`) to the Error value owned by
-     * `Result<T, E>`.
-     *
-     * @exception std::exception Thrown if `Result<T, E>` doesn't actually have
-     * an Error value.
-     * @sa Err<E>
-     *
-     * @since v1.0.0
-     */
-    constexpr E &Err() &
-    {
-        if (!is_Err())
-            throw std::exception("Called Err() on an Ok value.");
-        return this->err_unchecked();
-    }
-    /**
-     * @brief Creates a new object of type `E` by copying it from the one owned
-     * by `Result<T, E>`
-     * @remark `E` must be copy constructible.
-     * @return A new object of type `E`.
-     *
-     * @exception std::exception Thrown if `Result<T, E>` doesn't actually have
-     * an Error value.
-     * @sa Err<E>
-     *
-     * @since v1.0.0
-     */
-    constexpr E CloneErr() const &
-    {
-        static_assert(std::is_copy_constructible_v<E>,
-                      "CloneErr() requires E to be copyable.");
-
-        if (!is_Err())
-            throw std::exception("Called CloneErr() on an Ok value.");
-        return this->err_unchecked();
-    }
-    /**
-     * @return Moves the Err value out of `Result<T, E>`.
-     *
-     * @exception std::exception Thrown if `Result<T, E>` doesn't actually have
-     * an Err value.
-     * @sa Err<E>
-     *
-     * @since v1.0.0
-     */
-    constexpr E &&UnwrapErr()
-    {
-        if (!is_Err())
-            throw std::exception("Called UnwrapErr() on a Ok value.");
-
-        return std::move(*this).err_unchecked();
+        return None();
     }
 };
 }
