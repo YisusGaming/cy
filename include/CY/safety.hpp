@@ -259,7 +259,16 @@ class Maybe<T &>
     {
     }
 
+    /**
+     * @brief Whether this `Maybe<T>` is `Some<T>`.
+     *
+     * @return true If it is.
+     * @return false If it isn't.
+     */
     inline constexpr bool is_some() const { return this->has_value; }
+    /**
+     * @brief Opposite of `is_some`.
+     */
     inline constexpr bool is_none() const { return !this->is_some(); }
 
     /**
@@ -293,6 +302,10 @@ class Maybe<T &>
     }
 };
 
+/**
+ * @brief An Ok value.
+ * @ref Result<T, E>
+ */
 template<typename T>
 class Ok
 {
@@ -305,11 +318,26 @@ class Ok
     {
     }
 
+    /**
+     * @brief Gets a const reference to `T` (`T const&`).
+     *
+     */
     inline T const &get() const & { return this->value; }
-    inline T       &get()       &{ return this->value; }
-    inline T      &&take() { return std::move(this->value); }
+    /**
+     * @brief Gets a reference to `T` (`T &`).
+     *
+     */
+    inline T &get() & { return this->value; }
+    /**
+     * @brief Gets an rvalue reference to `T` (`T&&`), allowing to move it out
+     * of `Ok`.
+     */
+    inline T &&take() { return std::move(this->value); }
 };
-
+/**
+ * @brief An Err value.
+ * @ref Result<T, E>
+ */
 template<typename E>
 class Err
 {
@@ -325,9 +353,21 @@ class Err
     {
     }
 
+    /**
+     * @brief Gets a const reference to `E` (`E const&`).
+     *
+     */
     inline E const &get() const & { return this->err; }
-    inline E       &get()       &{ return this->err; }
-    inline E      &&take() { return std::move(this->err); }
+    /**
+     * @brief Gets a reference to `E` (`E &`).
+     *
+     */
+    inline E &get() & { return this->err; }
+    /**
+     * @brief Gets an rvalue reference to `E` (`E&&`), allowing to move it out
+     * of `Err`.
+     */
+    inline E &&take() { return std::move(this->err); }
 };
 
 #define CHECK_IF_VALID_T(func)                                                 \
@@ -346,9 +386,17 @@ class Err
             "Called " func                                                     \
             " on a moved value (Result had E, but was unwrapped)");
 
+/**
+ * @brief Class representing a value/error situation.
+ * @ref Ok<T>
+ * @ref Err<E>
+ */
 template<typename T, typename E>
 class [[nodiscard("Result must be handled.")]] Result
 {
+    static_assert(!std::is_void_v<E>,
+                  "Result<T, void> is invalid. Use Maybe<T> instead.");
+
   private:
     bool is_error;
     bool has_data;
@@ -400,9 +448,24 @@ class [[nodiscard("Result must be handled.")]] Result
     {
     }
 
+    /**
+     * @brief Whether this `Result<T, E>` is `Err<E>`.
+     *
+     * @return true If it is.
+     * @return false If it isn't.
+     */
     inline constexpr bool is_err() const { return this->is_error; }
+    /**
+     * @brief Opposite of `is_err`.
+     */
     inline constexpr bool is_ok() const { return !this->is_err(); }
 
+    /**
+     * @brief Gets a const reference to `T` (`T const&`).
+     *
+     * @exception std::runtime_error Thrown if `Result<T, E>` doesn't actually
+     * have a value.
+     */
     constexpr T const &get() const &
     {
         CHECK_IF_VALID_T(".get()");
@@ -410,6 +473,12 @@ class [[nodiscard("Result must be handled.")]] Result
         return this->get_unchecked();
     }
 
+    /**
+     * @brief Gets a reference to `T` (`T&`).
+     *
+     * @exception std::runtime_error Thrown if `Result<T,E>` doesn't actually
+     * have a value.
+     */
     constexpr T &get() &
     {
         CHECK_IF_VALID_T(".get()");
@@ -417,6 +486,12 @@ class [[nodiscard("Result must be handled.")]] Result
         return this->get_unchecked();
     }
 
+    /**
+     * @brief Gets a const reference to `E` (`E const&`).
+     *
+     * @exception std::runtime_error Thrown if `Result<T,E>` doesn't actually
+     * have an error.
+     */
     constexpr E const &get_err() const &
     {
         CHECK_IF_VALID_E(".get_err()");
@@ -424,6 +499,12 @@ class [[nodiscard("Result must be handled.")]] Result
         return this->get_err_unchecked();
     }
 
+    /**
+     * @brief Gets a  reference to `E` (`E &`).
+     *
+     * @exception std::runtime_error Thrown if `Result<T,E>` doesn't actually
+     * have an error.
+     */
     constexpr E &get_err() &
     {
         CHECK_IF_VALID_E(".get_err()");
@@ -431,6 +512,12 @@ class [[nodiscard("Result must be handled.")]] Result
         return this->get_err_unchecked();
     }
 
+    /**
+     * @brief Unwraps the value in `Result<T, E>`, allowing to move it out.
+     *
+     * @exception std::runtime_error Thrown if `Result<T, E>` doesn't actually
+     * have a value.
+     */
     constexpr T &&unwrap()
     {
         CHECK_IF_VALID_T(".unwrap()");
@@ -438,6 +525,12 @@ class [[nodiscard("Result must be handled.")]] Result
         return this->unwrap_unchecked();
     }
 
+    /**
+     * @brief Unwraps the error in `Result<T, E>`, allowing to move it out.
+     *
+     * @exception std::runtime_error Thrown if `Result<T, E>` doesn't actually
+     * have an error.
+     */
     constexpr E &&unwrap_err()
     {
         CHECK_IF_VALID_E(".unwrap_err()");
@@ -445,6 +538,11 @@ class [[nodiscard("Result must be handled.")]] Result
         return this->unwrap_err_unchecked();
     }
 
+    /**
+     * @brief Converts this result into a `Maybe<T>`, which will be `Some<T>` if
+     * `Result<T, E>` is `Ok<T>` and holds a valid `T`. `T` will me moved into
+     * `Maybe<T>`. Otherwise, `None`.
+     */
     constexpr Maybe<T> ok()
     {
         if (!this->is_error && this->has_data) {
@@ -454,6 +552,11 @@ class [[nodiscard("Result must be handled.")]] Result
         return None();
     }
 
+    /**
+     * @brief Converts this result into a `Maybe<E>`, which will be `Some<E>` if
+     * `Result<T, E>` is `Err<E>` and holds a valid `E`. `E` will me moved into
+     * `Maybe<E>`. Otherwise, `None`.
+     */
     constexpr Maybe<E> err()
     {
         if (this->is_error && this->has_data) {
@@ -464,6 +567,13 @@ class [[nodiscard("Result must be handled.")]] Result
     }
 };
 
+/**
+ * @attention This is a template specialization for `T&`. Working with
+ * references directly is tricky, so both `Ok<T&>` and `Result<T&, E>` hold `T*`
+ * instead of an actual reference.
+ * @brief An Ok value.
+ * @ref Result<T, E>
+ */
 template<typename T>
 class Ok<T &>
 {
@@ -476,12 +586,24 @@ class Ok<T &>
     {
     }
 
-    inline T &take() { return *this->value; }
+    /**
+     * @brief Gets a const reference to `T` (`T const&`).
+     *
+     */
+    inline constexpr T const &get() const & { return *this->value; }
+    /**
+     * @brief Gets a reference to `T` (`T &`).
+     *
+     */
+    inline constexpr T &get() & { return *this->value; }
 };
 
 template<typename T, typename E>
 class [[nodiscard("Result must be handled.")]] Result<T &, E>
 {
+    static_assert(!std::is_void_v<E>,
+                  "Result<T, void> is invalid. Use Maybe<T> instead.");
+
   private:
     bool is_error;
     bool has_data;
@@ -528,9 +650,24 @@ class [[nodiscard("Result must be handled.")]] Result<T &, E>
     {
     }
 
+    /**
+     * @brief Whether this `Result<T&, E>` is `Err<E>`.
+     *
+     * @return true If it is.
+     * @return false If it isn't.
+     */
     inline constexpr bool is_err() const { return this->is_error; }
+    /**
+     * @brief Opposite of `is_err`.
+     */
     inline constexpr bool is_ok() const { return !this->is_err(); }
 
+    /**
+     * @brief Gets a const reference to `E` (`E const&`).
+     *
+     * @exception std::runtime_error Thrown if `Result<T,E>` doesn't actually
+     * have an error.
+     */
     constexpr E const &get_err() const &
     {
         CHECK_IF_VALID_E(".get_err()");
@@ -538,6 +675,12 @@ class [[nodiscard("Result must be handled.")]] Result<T &, E>
         return this->get_err_unchecked();
     }
 
+    /**
+     * @brief Gets a reference to `E` (`E &`).
+     *
+     * @exception std::runtime_error Thrown if `Result<T,E>` doesn't actually
+     * have an error.
+     */
     constexpr E &get_err() &
     {
         CHECK_IF_VALID_E(".get_err()");
@@ -545,6 +688,12 @@ class [[nodiscard("Result must be handled.")]] Result<T &, E>
         return this->get_err_unchecked();
     }
 
+    /**
+     * @brief Unwraps the reference in `Result<T&, E>`, allowing to move it out.
+     *
+     * @exception std::runtime_error Thrown if `Result<T&, E>` doesn't actually
+     * have a reference.
+     */
     constexpr T &unwrap()
     {
         CHECK_IF_VALID_T(".unwrap()");
@@ -552,6 +701,12 @@ class [[nodiscard("Result must be handled.")]] Result<T &, E>
         return this->unwrap_unchecked();
     }
 
+    /**
+     * @brief Unwraps the error in `Result<T, E>`, allowing to move it out.
+     *
+     * @exception std::runtime_error Thrown if `Result<T, E>` doesn't actually
+     * have an error.
+     */
     constexpr E &&unwrap_err()
     {
         CHECK_IF_VALID_E(".unwrap_err()");
@@ -559,6 +714,11 @@ class [[nodiscard("Result must be handled.")]] Result<T &, E>
         return this->unwrap_err_unchecked();
     }
 
+    /**
+     * @brief Converts this result into a `Maybe<T>`, which will be `Some<T>` if
+     * `Result<T, E>` is `Ok<T>` and holds a valid `T`. `T` will me moved into
+     * `Maybe<T>`. Otherwise, `None`.
+     */
     constexpr Maybe<T &> ok()
     {
         if (!this->is_error && this->has_data) {
@@ -568,6 +728,11 @@ class [[nodiscard("Result must be handled.")]] Result<T &, E>
         return None();
     }
 
+    /**
+     * @brief Converts this result into a `Maybe<E>`, which will be `Some<E>` if
+     * `Result<T, E>` is `Err<E>` and holds a valid `E`. `E` will me moved into
+     * `Maybe<E>`. Otherwise, `None`.
+     */
     constexpr Maybe<E> err()
     {
         if (this->is_error && this->has_data) {
@@ -578,6 +743,11 @@ class [[nodiscard("Result must be handled.")]] Result<T &, E>
     }
 };
 
+/**
+ * @attention This is a template specialization for `void`.
+ * @brief A succeeded operation that doesn't actually return a value..
+ * @ref Result<T, E>
+ */
 template<>
 class Ok<void>
 {
@@ -589,6 +759,9 @@ Ok() -> Ok<void>;
 template<typename E>
 class [[nodiscard("Result must be handled.")]] Result<void, E>
 {
+    static_assert(!std::is_void_v<E>,
+                  "Result<T, void> is invalid. Use Maybe<T> instead.");
+
   private:
     bool is_error;
     bool has_data;
@@ -627,9 +800,24 @@ class [[nodiscard("Result must be handled.")]] Result<void, E>
     {
     }
 
+    /**
+     * @brief Whether this `Result<T, E>` is `Err<E>`.
+     *
+     * @return true If it is.
+     * @return false If it isn't.
+     */
     inline constexpr bool is_err() const { return this->is_error; }
+    /**
+     * @brief Opposite of `is_err`.
+     */
     inline constexpr bool is_ok() const { return !this->is_err(); }
 
+    /**
+     * @brief Gets a const reference to `E` (`E const&`).
+     *
+     * @exception std::runtime_error Thrown if `Result<T,E>` doesn't actually
+     * have an error.
+     */
     constexpr E const &get_err() const &
     {
         CHECK_IF_VALID_E(".get_err()");
@@ -637,6 +825,12 @@ class [[nodiscard("Result must be handled.")]] Result<void, E>
         return this->get_err_unchecked();
     }
 
+    /**
+     * @brief Gets a reference to `E` (`E &`).
+     *
+     * @exception std::runtime_error Thrown if `Result<T,E>` doesn't actually
+     * have an error.
+     */
     constexpr E &get_err() &
     {
         CHECK_IF_VALID_E(".get_err()");
@@ -644,6 +838,12 @@ class [[nodiscard("Result must be handled.")]] Result<void, E>
         return this->get_err_unchecked();
     }
 
+    /**
+     * @brief Unwraps the error in `Result<T, E>`, allowing to move it out.
+     *
+     * @exception std::runtime_error Thrown if `Result<T, E>` doesn't actually
+     * have an error.
+     */
     constexpr E &&unwrap_err()
     {
         CHECK_IF_VALID_E(".unwrap_err()");
@@ -651,6 +851,11 @@ class [[nodiscard("Result must be handled.")]] Result<void, E>
         return this->unwrap_err_unchecked();
     }
 
+    /**
+     * @brief Converts this result into a `Maybe<E>`, which will be `Some<E>` if
+     * `Result<T, E>` is `Err<E>` and holds a valid `E`. `E` will me moved into
+     * `Maybe<E>`. Otherwise, `None`.
+     */
     constexpr Maybe<E> err()
     {
         if (this->is_error && this->has_data) {
