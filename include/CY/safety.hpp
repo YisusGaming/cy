@@ -587,15 +587,9 @@ class Ok<T &>
     }
 
     /**
-     * @brief Gets a const reference to `T` (`T const&`).
-     *
+     * @brief Gets the reference to `T` (`T&`).
      */
-    inline constexpr T const &get() const & { return *this->value; }
-    /**
-     * @brief Gets a reference to `T` (`T &`).
-     *
-     */
-    inline constexpr T &get() & { return *this->value; }
+    inline T &take() { return *this->value; }
 };
 
 template<typename T, typename E>
