@@ -17,15 +17,15 @@ struct Test
 };
 cy::Maybe<void> maybe_V;
 cy::Some<void>  some_V;
-cy::Maybe<Test> maybe_NoDefaultC{ cy::None() };
+cy::Maybe<Test> maybe_NoDefaultC{
+    cy::None()
+}; // no longer fails, this is allowed now!
 #endif
 
 struct Find
 {
     char  c;
     usize indx;
-
-    Find() = default;
 
     Find(char c, usize i)
         : c(c)
