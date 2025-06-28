@@ -4,6 +4,23 @@
 #include <cstdio>
 #include <exception>
 
+struct NonDefaultC_NonCpy
+{
+  public:
+    int32 a;
+
+    NonDefaultC_NonCpy(int32 a)
+        : a(a)
+    {
+    }
+
+    NonDefaultC_NonCpy(NonDefaultC_NonCpy const &) = delete;
+    NonDefaultC_NonCpy &operator=(NonDefaultC_NonCpy const &) = delete;
+
+    NonDefaultC_NonCpy(NonDefaultC_NonCpy &&) = default;
+    NonDefaultC_NonCpy &operator=(NonDefaultC_NonCpy &&) = default;
+};
+
 cy::Result<void, str> Write(str                               msg,
                             bool /* i know, pretty lazy... */ fail = false)
 {
@@ -53,6 +70,18 @@ int32 main(void)
     std::printf("%p == %p succeeded!\n", &b, &b_recovered);
     assert(b == b_recovered);
     std::printf("%i == %i succeeded!\n", b, b_recovered);
+
+    auto nondccpy = cy::Result<NonDefaultC_NonCpy, std::exception>(
+        cy::Ok(NonDefaultC_NonCpy(10)));
+
+    assert(nondccpy.get().a == 10);
+    std::printf("%i == %i succeeded!\n", nondccpy.get().a, 10);
+
+    auto nondccpy_recovered = nondccpy.unwrap();
+    assert(nondccpy.ok().is_none()); //                        ^
+                                     // should be none because this call
+                                     // unwrapped the value.
+    assert(nondccpy_recovered.a == 10);
 
     std::printf("\n-----------------------OK-------------------------\n");
     return 0;
