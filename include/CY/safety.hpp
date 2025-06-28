@@ -19,6 +19,11 @@ namespace cy {
 template<typename T>
 class Maybe;
 
+/**
+ * @brief `Some` value of type `T`.
+ *
+ * @ref Maybe<T>
+ */
 template<typename T>
 class Some
 {
@@ -35,17 +40,35 @@ class Some
     {
     }
 
+    /**
+     * @brief Gets a const reference to `T` (`T const&`).
+     */
     inline constexpr T const &get() const & { return this->val; }
-    inline constexpr T       &get()       &{ return this->val; }
-    inline const T          &&take() { return std::move(this->val); }
+    /**
+     * @brief Gets a reference to `T` (`T&`).
+     */
+    inline constexpr T &get() & { return this->val; }
+    /**
+     * @brief Gets an rvalue reference to `T` (`T&&`), allowing to move it out
+     * of `Some`.
+     */
+    inline const T &&take() { return std::move(this->val); }
 };
 
+/**
+ * @brief Represents the absence of a value.
+ *
+ */
 class None
 {
   public:
     constexpr None() = default;
 };
 
+/**
+ * @brief `Maybe<T>` represents a value that might or might not exist. If it's
+ * `Some<T>`, then the value exists. If it is `None`, then it does not exist.
+ */
 template<typename T>
 class Maybe
 {
@@ -89,9 +112,24 @@ class Maybe
     {
     }
 
+    /**
+     * @brief Whether this `Maybe<T>` is `Some<T>`.
+     *
+     * @return true If it is.
+     * @return false If it isn't.
+     */
     inline constexpr bool is_some() const { return this->has_value; }
+    /**
+     * @brief Opposite of `is_some`.
+     */
     inline constexpr bool is_none() const { return !this->is_some(); }
 
+    /**
+     * @brief Gets a const reference to `T` (`T const&`).
+     *
+     * @exception std::runtime_error Thrown if `Maybe<T>` doesn't actually have
+     * a value.
+     */
     constexpr T const &get() const &
     {
         if (!this->has_value)
@@ -99,6 +137,12 @@ class Maybe
 
         return this->get_unchecked();
     }
+    /**
+     * @brief Gets a reference to `T` (`T&`).
+     *
+     * @exception std::runtime_error Thrown if `Maybe<T>` doesn't actually have
+     * a value.
+     */
     constexpr T &get() &
     {
         if (!this->has_value)
@@ -106,6 +150,12 @@ class Maybe
 
         return this->get_unchecked();
     }
+    /**
+     * @brief Unwraps the value in `Maybe<T>`, allowing to move it out.
+     *
+     * @exception std::runtime_error Thrown if `Maybe<T>` doesn't actually have
+     * a value.
+     */
     constexpr T &&unwrap()
     {
         if (!this->has_value)
@@ -114,6 +164,12 @@ class Maybe
         return this->unwrap_unchecked();
     }
 
+    /**
+     * @brief Maps a `Maybe<T>` to a `Maybe<U>` by taking a function that maps
+     * `T` to `U` and running it if `Maybe<T>` is `Some<T>`.
+     *
+     * @param func Function mapping `T` to `U`.
+     */
     template<typename U>
     Maybe<U> map(std::function<U(T)> func)
     {
@@ -125,6 +181,15 @@ class Maybe
     }
 };
 
+/**
+ * @attention This is a template specialization for `T&`. Working with
+ * references directly is tricky, so both `Some<T&>` and `Maybe<T&>` hold `T*`
+ * instead of an actual reference.
+ * @brief `Some` value of type `T&`.
+ *
+ * @ref Maybe<T&>
+ * @ref Some<T>
+ */
 template<typename T>
 class Some<T &>
 {
@@ -141,8 +206,16 @@ class Some<T &>
     {
     }
 
+    /**
+     * @brief Gets a const reference to `T` (`T const&`).
+     *
+     */
     inline constexpr T const &get() const & { return *this->val; }
-    inline constexpr T       &get()       &{ return *this->val; }
+    /**
+     * @brief Gets a reference to `T` (`T &`).
+     *
+     */
+    inline constexpr T &get() & { return *this->val; }
 };
 
 template<typename T>
@@ -175,16 +248,17 @@ class Maybe<T &>
     constexpr Maybe()
         : has_value(false)
     {
-        if constexpr (std::is_class_v<T>) {
-            static_assert(
-                std::is_default_constructible_v<T>,
-                "Maybe<class T> requires T to be default constructible.");
-        }
     }
 
     inline constexpr bool is_some() const { return this->has_value; }
     inline constexpr bool is_none() const { return !this->is_some(); }
 
+    /**
+     * @brief Unwraps the reference in `Maybe<T&>`, allowing to move it out.
+     *
+     * @exception std::runtime_error Thrown if `Maybe<T&>` doesn't actually have
+     * a reference.
+     */
     constexpr T &unwrap()
     {
         if (!this->has_value)
@@ -193,6 +267,12 @@ class Maybe<T &>
         return this->unwrap_unchecked();
     }
 
+    /**
+     * @brief Maps a `Maybe<T&>` to a `Maybe<U>` by taking a function that maps
+     * `T&` to `U` and running it if `Maybe<T&>` is `Some<T&>`.
+     *
+     * @param func Function mapping `T&` to `U`.
+     */
     template<typename U>
     Maybe<U> map(std::function<U(T &)> func)
     {
