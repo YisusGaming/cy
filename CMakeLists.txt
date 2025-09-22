@@ -10,3 +10,12 @@ include_directories("${CMAKE_CURRENT_SOURCE_DIR}/include")
 add_executable(types "${CMAKE_CURRENT_SOURCE_DIR}/tests/types.cpp")
 add_executable(maybe "${CMAKE_CURRENT_SOURCE_DIR}/tests/maybe.cpp")
 add_executable(result "${CMAKE_CURRENT_SOURCE_DIR}/tests/result.cpp")
+
+add_custom_target(runtests
+                  COMMAND
+                  "${CMAKE_BINARY_DIR}/types.exe"
+                  && "${CMAKE_BINARY_DIR}/maybe.exe"
+                  && "${CMAKE_BINARY_DIR}/result.exe"
+                  DEPENDS types maybe result
+                  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)
