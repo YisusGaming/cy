@@ -2,7 +2,7 @@
  * @file types.hpp
  * @author Jesús Blanco
  * @brief The custom typenames for CY.
- * @version 1.0.0
+ * @version 1.0.1
  * @date 2025-04-19
  *
  * @copyright Copyright (c) Jesús Blanco. See LICENSE for details.
@@ -13,7 +13,6 @@
 
 #include <stdint.h>
 
-#define null 0
 #define fnptr(fn, ...) (*fn)(__VA_ARGS__)
 
 /// @brief A read-only string (char const*) type.
